@@ -105,9 +105,7 @@ protected:
                 other.nSize    = 0;
             }
             else
-            {
-                std::memcpy(m_vBytes, other.m_vBytes, sizeof(m_vBytes));
-            }
+                m_vBytes = std::move(other.m_vBytes);
         }
         MemBlock& operator=(MemBlock&&) noexcept = delete;
         ~MemBlock() noexcept
@@ -116,17 +114,23 @@ protected:
                 delete[] m_pBytes;
         }
 
-        unsigned char* GetBytes() noexcept { return (nSize > sizeof(m_vBytes)) ? m_pBytes : &m_vBytes[0]; }
-        const unsigned char* GetBytes() const noexcept { return (nSize > sizeof(m_vBytes)) ? m_pBytes : &m_vBytes[0]; }
+        unsigned char* GetBytes() noexcept { return get_bytes_impl(*this); }
+        const unsigned char* GetBytes() const noexcept { return get_bytes_impl(*this); }
         unsigned char GetByte(std::size_t nIndex) noexcept { return GetBytes()[nIndex]; }
         unsigned char GetByte(std::size_t nIndex) const noexcept { return GetBytes()[nIndex]; }
         unsigned int GetAddress() const noexcept { return nAddress; }
         unsigned int GetSize() const noexcept { return nSize; }
 
     private:
+        template<typename T>
+        inline static auto get_bytes_impl(T& mb) noexcept -> decltype(mb.GetBytes())
+        {
+            return (mb.nSize > sizeof(mb.m_vBytes) ? mb.m_pBytes : std::data(mb.m_vBytes));
+        }
+
         union // 8 bytes
         {
-            unsigned char m_vBytes[8]{};
+            std::array<unsigned char, 8> m_vBytes{};
             unsigned char* m_pBytes;
         };
 

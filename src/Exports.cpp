@@ -54,8 +54,9 @@ static void HandleLoginResponse(const ra::api::Login::Response& response)
         ra::services::ServiceLocator::Get<ra::services::IAudioSystem>().PlayAudioFile(L"Overlay\\login.wav");
 
         ra::ui::viewmodels::PopupMessageViewModel message;
-        message.SetTitle(ra::StringPrintf(L"Welcome %s%s (%u)", pSessionTracker.HasSessionData() ? L"back " : L"",
-            response.Username.c_str(), response.Score));
+        message.SetTitle(ra::StringPrintf(L"Welcome %s%s (%u)",
+                                          pSessionTracker.HasSessionData() ? std::wstring{L"back "} : std::wstring{},
+                                          response.Username, response.Score));
         message.SetDescription((response.NumUnreadMessages == 1)
             ? L"You have 1 new message"
             : ra::StringPrintf(L"You have %u new messages", response.NumUnreadMessages));

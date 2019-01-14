@@ -59,7 +59,7 @@ std::vector<size_t> MemManager::GetBankIDs() const
 
 unsigned int MemManager::ActiveBankRAMRead(ra::ByteAddress nOffs, MemSize size) const
 {
-    unsigned char buffer[4]{};
+    std::array<unsigned char, 4> buffer{};
     switch (size)
     {
         case MemSize::Bit_0:
@@ -86,11 +86,11 @@ unsigned int MemManager::ActiveBankRAMRead(ra::ByteAddress nOffs, MemSize size) 
             return ActiveBankRAMByteRead(nOffs);
         default:
         case MemSize::SixteenBit:
-            ActiveBankRAMRead(buffer, nOffs, 2);
-            return buffer[0] | (buffer[1] << 8);
+            ActiveBankRAMRead(std::data(buffer), nOffs, 2);
+            return buffer.at(0) | (buffer.at(1) << 8);
         case MemSize::ThirtyTwoBit:
-            ActiveBankRAMRead(buffer, nOffs, 4);
-            return buffer[0] | (buffer[1] << 8) | (buffer[2] << 16) | (buffer[3] << 24);
+            ActiveBankRAMRead(std::data(buffer), nOffs, 4);
+            return buffer.at(0) | (buffer.at(1) << 8) | (buffer.at(2) << 16) | (buffer.at(3) << 24);
     }
 }
 

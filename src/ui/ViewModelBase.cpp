@@ -23,7 +23,8 @@ void ViewModelBase::SetValue(const BoolModelProperty& pProperty, bool bValue)
     }
 
 #ifdef _DEBUG
-    m_mDebugValues.insert_or_assign(pProperty.GetPropertyName(), bValue ? L"true" : L"false");
+    m_mDebugValues.insert_or_assign(pProperty.GetPropertyName(),
+                                    bValue ? std::wstring{L"true"} : std::wstring{L"false"});
 #endif
 
     if (!m_vNotifyTargets.empty())

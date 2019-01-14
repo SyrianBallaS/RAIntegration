@@ -32,13 +32,16 @@ private:
     static void SetupColumns(HWND hList);
     static void AddAchievementToListBox(_In_ HWND hList, _In_ const Achievement* restrict pAch);
 
-    inline static constexpr auto LbxDataAt(gsl::index row, gsl::index column) noexcept
+    inline static constexpr auto& LbxDataAt(gsl::index row, gsl::index column) noexcept
     {
-        return gsl::at(gsl::at(ms_lbxData, row), column);
+        return ms_lbxData.at(row).at(column);
     }
 
+    using LbxString = std::array<char, MAX_TEXT_LEN>;
+    using LbxData = std::array<std::array<LbxString, COL_SIZE.size()>, MAX_ACHIEVEMENTS>;
+
     static gsl::index ms_nNumOccupiedRows;
-    static char ms_lbxData[MAX_ACHIEVEMENTS][COL_SIZE.size()][MAX_TEXT_LEN];
+    static LbxData ms_lbxData;
 };
 
 extern Dlg_AchievementsReporter g_AchievementsReporterDialog;

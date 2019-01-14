@@ -669,10 +669,10 @@ void AchievementOverlay::DrawAchievementExaminePage(HDC hDC, int nDX, _UNUSED in
     if (m_nAchievementsSelectedItem >= ra::to_signed(nNumAchievements))
         return;
 
-    auto buffer = ra::StringPrintf(" Created: %s ", _TimeStampToString(tCreated));
+    auto buffer = ra::StringPrintf(" Created: %s ", ra::TimeStampToString("%c", tCreated));
     TextOut(hDC, nDX + 20, nCoreDetailsY, NativeStr(buffer).c_str(), gsl::narrow<int>(buffer.length()));
 
-    buffer = ra::StringPrintf(" Modified: %s ", _TimeStampToString(tModified));
+    buffer = ra::StringPrintf(" Modified: %s ", ra::TimeStampToString("%c", tModified));
     TextOut(hDC, nDX + 20, nCoreDetailsY + nCoreDetailsSpacing, NativeStr(buffer).c_str(),
             gsl::narrow<int>(buffer.length()));
 
@@ -957,26 +957,20 @@ void AchievementOverlay::DrawLeaderboardExaminePage(HDC hDC, int nDX, _UNUSED in
             for (size_t i = 0; i < pLB->GetRankInfoCount(); ++i)
             {
                 const RA_Leaderboard::Entry& rEntry = pLB->GetRankInfo(i);
-                std::string sScoreFormatted = pLB->FormatScore(rEntry.m_nScore);
+                const auto sScoreFormatted{pLB->FormatScore(rEntry.m_nScore)};
 
-                char sRankText[256];
-                sprintf_s(sRankText, 256, " %u ", rEntry.m_nRank);
-
-                char sNameText[256];
-                sprintf_s(sNameText, 256, " %s ", rEntry.m_sUsername.c_str());
-
-                char sScoreText[256];
-                sprintf_s(sScoreText, 256, " %s ", sScoreFormatted.c_str());
-
-                //	Draw/Fetch user image? //TBD
+                auto buffer = ra::StringPrintf(" %u ", rEntry.m_nRank);
+                // Draw/Fetch user image? //TBD
                 TextOut(hDC, nDX + nWonByPlayerRankX, nLeaderboardYOffs + (i * nLeaderboardYSpacing),
-                        NativeStr(sRankText).c_str(), strlen(sRankText));
+                        NativeStr(buffer).c_str(), ra::to_signed(buffer.length()));
 
+                buffer = ra::StringPrintf(" %s ", rEntry.m_sUsername.c_str());
                 TextOut(hDC, nDX + nWonByPlayerUserX, nLeaderboardYOffs + (i * nLeaderboardYSpacing),
-                        NativeStr(sNameText).c_str(), strlen(sNameText));
+                        NativeStr(buffer).c_str(), ra::to_signed(buffer.length()));
 
+                buffer = ra::StringPrintf(" %s ", sScoreFormatted.c_str());
                 TextOut(hDC, nDX + nWonByPlayerScoreX, nLeaderboardYOffs + (i * nLeaderboardYSpacing),
-                        NativeStr(sScoreText).c_str(), strlen(sScoreText));
+                        NativeStr(buffer).c_str(), ra::to_signed(buffer.length()));
             }
         }
         else
@@ -1401,21 +1395,13 @@ void AchievementOverlay::InstallNewsArticlesFromFile()
                 NextNewsArticle["Title"].GetString(),
                 NextNewsArticle["Payload"].GetString(),
                 NextNewsArticle["TimePosted"].GetUint(),
-                "", /* this value is assigned properly in the scope below */
+                {},
                 NextNewsArticle["Author"].GetString(),
                 NextNewsArticle["Link"].GetString(),
                 NextNewsArticle["Image"].GetString(),
             };
 
-            {
-                std::tm destTime;
-                localtime_s(&destTime, &nNewsItem.m_nPostedAt);
-
-                char buffer[256U]{};
-                strftime(buffer, 256U, "%b %d", &destTime);
-                nNewsItem.m_sPostedAt = buffer;
-            }
-
+            nNewsItem.m_sPostedAt = ra::TimeStampToString("%b %d", nNewsItem.m_nPostedAt);
             m_LatestNews.push_back(std::move(nNewsItem));
         }
     }
@@ -1456,8 +1442,8 @@ void AchievementExamine::Initialize(const Achievement* pAch)
     else
     {
         //	Go fetch data:
-        m_CreatedDate = _TimeStampToString(pAch->CreatedDate());
-        m_LastModifiedDate = _TimeStampToString(pAch->ModifiedDate());
+        m_CreatedDate = ra::TimeStampToString("%c", pAch->CreatedDate());
+        m_LastModifiedDate = ra::TimeStampToString("%c", pAch->ModifiedDate());
 
         PostArgs args;
         args['u'] = RAUsers::LocalUser().Username();
@@ -1489,7 +1475,7 @@ void AchievementExamine::OnReceiveData(rapidjson::Document& doc)
         const auto nDateAwarded{static_cast<time_t>(ra::to_signed(NextWinner["DateAwarded"].GetUint()))};
         std::ostringstream oss;
         oss << NextWinner["User"].GetString() << " (" << NextWinner["RAPoints"].GetUint() << ")";
-        RecentWinners.emplace_back(oss.str(), _TimeStampToString(nDateAwarded));
+        RecentWinners.emplace_back(oss.str(), ra::TimeStampToString("%c", nDateAwarded));
     }
 
     m_bHasData = true;

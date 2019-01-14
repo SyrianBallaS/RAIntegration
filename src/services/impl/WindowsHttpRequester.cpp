@@ -148,8 +148,10 @@ unsigned int WindowsHttpRequester::Request(const Http::Request& pRequest, TextWr
 
             // open the connection
             auto sPathWide = ra::Widen(sPath);
+            constexpr auto sGet{L"GET"};
+            constexpr auto sPost{L"POST"};
             HINTERNET hRequest = WinHttpOpenRequest(hConnect,
-                sPostData.empty() ? L"GET" : L"POST",
+                sPostData.empty() ? sGet : sPost,
                 sPathWide.c_str(),
                 nullptr,
                 WINHTTP_NO_REFERER,

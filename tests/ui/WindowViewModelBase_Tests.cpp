@@ -27,9 +27,8 @@ TEST_CLASS(WindowViewModelBase_Tests)
     {
         if (pExpected != pActual)
         {
-            wchar_t buffer[128];
-            swprintf_s(buffer, 128, L"%p != %p", pExpected, pActual);
-            Assert::Fail(buffer);
+            const auto buffer = ra::StringPrintf(L"%p != %p", pExpected, pActual);
+            Assert::Fail(buffer.c_str());
         }
     }
 

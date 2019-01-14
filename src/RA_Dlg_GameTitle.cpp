@@ -92,16 +92,16 @@ INT_PTR Dlg_GameTitle::GameTitleProc(HWND hDlg, UINT uMsg, WPARAM wParam, _UNUSE
                 case IDOK:
                 {
                     //	Fetch input data:
-                    TCHAR sSelectedTitleBuffer[512];
-                    ComboBox_GetText(GetDlgItem(hDlg, IDC_RA_KNOWNGAMES), sSelectedTitleBuffer, 512);
-                    ra::tstring sSelectedTitle = sSelectedTitleBuffer;
+                    std::array<TCHAR, 512> sSelectedTitleBuffer{};
+                    ComboBox_GetText(GetDlgItem(hDlg, IDC_RA_KNOWNGAMES), std::data(sSelectedTitleBuffer), 512);
+                    ra::tstring sSelectedTitle{std::data(sSelectedTitleBuffer)};
 
                     unsigned int nGameID = 0U;
                     if (sSelectedTitle == _T("<New Title>"))
                     {
                         //	Add a new title!
-                        GetDlgItemText(hDlg, IDC_RA_GAMETITLE, sSelectedTitleBuffer, 512);
-                        sSelectedTitle = sSelectedTitleBuffer;
+                        GetDlgItemText(hDlg, IDC_RA_GAMETITLE, std::data(sSelectedTitleBuffer), 512);
+                        sSelectedTitle = std::data(sSelectedTitleBuffer);
                     }
                     else
                     {
@@ -177,9 +177,9 @@ INT_PTR Dlg_GameTitle::GameTitleProc(HWND hDlg, UINT uMsg, WPARAM wParam, _UNUSE
                             //	If the user has selected a value, copy this text to the bottom textbox.
                             bUpdatingTextboxTitle = TRUE;
 
-                            TCHAR sSelectedTitle[512];
-                            GetDlgItemText(hDlg, IDC_RA_KNOWNGAMES, sSelectedTitle, 512);
-                            SetDlgItemText(hDlg, IDC_RA_GAMETITLE, sSelectedTitle);
+                            std::array<TCHAR, 512> sSelectedTitle{};
+                            GetDlgItemText(hDlg, IDC_RA_KNOWNGAMES, std::data(sSelectedTitle), 512);
+                            SetDlgItemText(hDlg, IDC_RA_GAMETITLE, std::data(sSelectedTitle));
 
                             bUpdatingTextboxTitle = FALSE;
                         }

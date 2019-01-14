@@ -305,10 +305,10 @@ LRESULT CALLBACK DropDownProc(HWND hwnd, UINT nMsg, WPARAM wParam, LPARAM lParam
             lvDispinfo.item.iSubItem = nSelSubItem;
             lvDispinfo.item.pszText = nullptr;
 
-            TCHAR sEditText[32];
-            GetWindowText(hwnd, sEditText, 32);
-            lvDispinfo.item.pszText = sEditText;
-            lvDispinfo.item.cchTextMax = lstrlen(sEditText);
+            std::array<TCHAR, 32> sEditText{};
+            GetWindowText(hwnd, std::data(sEditText), 32);
+            lvDispinfo.item.pszText = std::data(sEditText);
+            lvDispinfo.item.cchTextMax = ra::to_signed(ra::tcslen_s(std::data(sEditText)));
 
             // the LV ID and the LVs Parent window's HWND
             HWND hList = GetDlgItem(g_AchievementEditorDialog.GetHWND(), IDC_RA_LBX_CONDITIONS);
@@ -338,10 +338,10 @@ LRESULT CALLBACK DropDownProc(HWND hwnd, UINT nMsg, WPARAM wParam, LPARAM lParam
             lvDispinfo.item.iSubItem = nSelSubItem;
             lvDispinfo.item.pszText = nullptr;
 
-            TCHAR sEditText[32];
-            GetWindowText(hwnd, sEditText, 32);
-            lvDispinfo.item.pszText = sEditText;
-            lvDispinfo.item.cchTextMax = lstrlen(sEditText);
+            std::array<TCHAR, 32> sEditText{};
+            GetWindowText(hwnd, std::data(sEditText), 32);
+            lvDispinfo.item.pszText = std::data(sEditText);
+            lvDispinfo.item.cchTextMax = ra::to_signed(ra::tcslen_s(std::data(sEditText)));
 
             HWND hList = GetDlgItem(g_AchievementEditorDialog.GetHWND(), IDC_RA_LBX_CONDITIONS);
 
@@ -636,8 +636,7 @@ BOOL CreateIPE(int nItem, CondSubItems nSubItem)
                     const size_t nGrp = g_AchievementEditorDialog.GetSelectedConditionGroup();
                     const Condition& Cond = g_AchievementEditorDialog.ActiveAchievement()->GetCondition(nGrp, nItem);
 
-                    char buffer[256];
-                    sprintf_s(buffer, 256, "%u", Cond.RequiredHits());
+                    const auto buffer{std::to_string(Cond.RequiredHits())};
                     SetWindowText(g_hIPEEdit, NativeStr(buffer).c_str());
                 }
             }
@@ -870,9 +869,9 @@ INT_PTR Dlg_AchievementEditor::AchievementEditorProc(HWND hDlg, UINT uMsg, WPARA
                         case CBN_SELENDOK:
                         case CBN_SELCHANGE:
                         {
-                            TCHAR buffer[16];
-                            GetWindowText(hBadgeNameCtrl, buffer, 16);
-                            UpdateBadge(ra::Narrow(buffer));
+                            std::array<TCHAR, 16> buffer{};
+                            GetWindowText(hBadgeNameCtrl, buffer.data(), 16);
+                            UpdateBadge(ra::Narrow(buffer.data()));
                         }
                         break;
                         case CBN_SELENDCANCEL:
@@ -919,10 +918,10 @@ INT_PTR Dlg_AchievementEditor::AchievementEditorProc(HWND hDlg, UINT uMsg, WPARA
                             if (nSelectedIndex != -1)
                             {
                                 // Implicit updating:
-                                TCHAR buffer[1024];
-                                if (GetDlgItemText(hDlg, IDC_RA_ACH_TITLE, buffer, 1024))
+                                std::array<TCHAR, 1024> buffer{};
+                                if (GetDlgItemText(hDlg, IDC_RA_ACH_TITLE, buffer.data(), 1024))
                                 {
-                                    pActiveAch->SetTitle(ra::Narrow(buffer));
+                                    pActiveAch->SetTitle(ra::Narrow(buffer.data()));
 
                                     // Persist/Update/Inject local LBX data back into LBX (?)
                                     g_AchievementsDialog.OnEditData(
@@ -962,9 +961,9 @@ INT_PTR Dlg_AchievementEditor::AchievementEditorProc(HWND hDlg, UINT uMsg, WPARA
 
                             // Implicit updating:
                             // char* psDesc = g_AchievementsDialog.LbxDataAt( nSelectedIndex, (int)Dlg_Achievements:: );
-                            TCHAR buffer[128];
-                            if (GetDlgItemText(hDlg, IDC_RA_ACH_DESC, buffer, 128))
-                                pActiveAch->SetDescription(ra::Narrow(buffer));
+                            std::array<TCHAR, 128> buffer{};
+                            if (GetDlgItemText(hDlg, IDC_RA_ACH_DESC, buffer.data(), 128))
+                                pActiveAch->SetDescription(ra::Narrow(buffer.data()));
                         }
                         break;
                     }
@@ -1029,9 +1028,9 @@ INT_PTR Dlg_AchievementEditor::AchievementEditorProc(HWND hDlg, UINT uMsg, WPARA
                     //  is probably what they are about to want to add a cond for.
                     if (g_MemoryDialog.GetHWND() != nullptr)
                     {
-                        TCHAR buffer[256];
-                        GetDlgItemText(g_MemoryDialog.GetHWND(), IDC_RA_WATCHING, buffer, 256);
-                        unsigned int nVal = strtoul(ra::Narrow(buffer).c_str(), nullptr, 16);
+                        std::array<TCHAR, 256> buffer{};
+                        GetDlgItemText(g_MemoryDialog.GetHWND(), IDC_RA_WATCHING, std::data(buffer), 256);
+                        unsigned int nVal = std::stoul(ra::Narrow(std::data(buffer)), nullptr, 16);
                         NewCondition.CompSource().SetValue(nVal);
                     }
 
@@ -1131,8 +1130,8 @@ INT_PTR Dlg_AchievementEditor::AchievementEditorProc(HWND hDlg, UINT uMsg, WPARA
                         {
                             const unsigned int uSelectedCount = ListView_GetSelectedCount(hList);
 
-                            char buffer[256];
-                            sprintf_s(buffer, 256, "Are you sure you wish to delete %u condition(s)?", uSelectedCount);
+                            const auto buffer =
+                                ra::StringPrintf("Are you sure you wish to delete %u condition(s)?", uSelectedCount);
                             if (MessageBox(hDlg, NativeStr(buffer).c_str(), TEXT("Warning"), MB_YESNO) == IDYES)
                             {
                                 nSel = -1;
@@ -1288,15 +1287,14 @@ INT_PTR Dlg_AchievementEditor::AchievementEditorProc(HWND hDlg, UINT uMsg, WPARA
 
                 case IDC_RA_UPLOAD_BADGE:
                 {
-                    const int BUF_SIZE = 1024;
-                    TCHAR buffer[BUF_SIZE];
-                    ZeroMemory(buffer, BUF_SIZE);
+                    constexpr int BUF_SIZE = 1024;
+                    std::array<TCHAR, BUF_SIZE> buffer{};
 
                     OPENFILENAME ofn{};
                     ofn.lStructSize = sizeof(OPENFILENAME);
                     ofn.hwndOwner = hDlg;
                     ofn.hInstance = GetModuleHandle(nullptr);
-                    ofn.lpstrFile = buffer;
+                    ofn.lpstrFile = std::data(buffer);
                     ofn.nMaxFile = BUF_SIZE - 1;
 
                     ofn.lpstrFilter = TEXT(
@@ -1440,10 +1438,10 @@ INT_PTR Dlg_AchievementEditor::AchievementEditorProc(HWND hDlg, UINT uMsg, WPARA
                         lvDispinfo.item.iSubItem = nSelSubItem;
                         lvDispinfo.item.pszText = nullptr;
 
-                        TCHAR sEditText[32];
-                        GetWindowText(g_hIPEEdit, sEditText, 32);
-                        lvDispinfo.item.pszText = sEditText;
-                        lvDispinfo.item.cchTextMax = lstrlen(sEditText);
+                        std::array<TCHAR, 32> sEditText{};
+                        GetWindowText(g_hIPEEdit, std::data(sEditText), 32);
+                        lvDispinfo.item.pszText = std::data(sEditText);
+                        lvDispinfo.item.cchTextMax = ra::to_signed(ra::tcslen_s(std::data(sEditText)));
 
                         HWND hList = GetDlgItem(GetHWND(), IDC_RA_LBX_CONDITIONS);
 
@@ -1510,8 +1508,7 @@ INT_PTR Dlg_AchievementEditor::AchievementEditorProc(HWND hDlg, UINT uMsg, WPARA
                                 SendMessage(g_RAMainWnd, WM_COMMAND, IDM_RA_FILES_MEMORYFINDER, 0);
 
                                 // Update the text to match
-                                char buffer[16];
-                                sprintf_s(buffer, 16, "0x%06x", rCond.CompSource().GetValue());
+                                const auto buffer = ra::StringPrintf("0x%06x", rCond.CompSource().GetValue());
                                 SetDlgItemText(g_MemoryDialog.GetHWND(), IDC_RA_WATCHING, NativeStr(buffer).c_str());
 
                                 // Nudge the ComboBox to update the mem note
@@ -1527,8 +1524,7 @@ INT_PTR Dlg_AchievementEditor::AchievementEditorProc(HWND hDlg, UINT uMsg, WPARA
                                 SendMessage(g_RAMainWnd, WM_COMMAND, IDM_RA_FILES_MEMORYFINDER, 0);
 
                                 // Update the text to match
-                                char buffer[16];
-                                sprintf_s(buffer, 16, "0x%06x", rCond.CompTarget().GetValue());
+                                const auto buffer = ra::StringPrintf("0x%06x", rCond.CompTarget().GetValue());
                                 SetDlgItemText(g_MemoryDialog.GetHWND(), IDC_RA_WATCHING, NativeStr(buffer).c_str());
 
                                 // Nudge the ComboBox to update the mem note
@@ -1765,7 +1761,7 @@ INT_PTR Dlg_AchievementEditor::AchievementEditorProc(HWND hDlg, UINT uMsg, WPARA
                     }
 
                     lpDispInfo->szText[0] = '\0';
-                    lpDispInfo->lpszText = lpDispInfo->szText;
+                    GSL_SUPPRESS_BOUNDS3 lpDispInfo->lpszText = lpDispInfo->szText;
                     return FALSE;
                 }
             }
@@ -2170,9 +2166,8 @@ void BadgeNames::OnNewBadgeNames(const rapidjson::Document& data)
 
     for (unsigned int i = nLowerLimit; i < nUpperLimit; ++i)
     {
-        TCHAR buffer[256];
-        _stprintf_s(buffer, _T("%05d"), i);
-        ComboBox_AddString(m_hDestComboBox, buffer);
+        const auto buffer = ra::StringPrintf(_T("%05u"), i);
+        ComboBox_AddString(m_hDestComboBox, std::data(buffer));
     }
 
     SendMessage(m_hDestComboBox, WM_SETREDRAW, TRUE, LPARAM{});

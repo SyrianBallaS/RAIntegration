@@ -26,7 +26,7 @@ _NODISCARD std::string Narrow(_In_ const std::string& wstr);
 /// <returns>Reference to <paramref name="str" /> for chaining.</returns>
 GSL_SUPPRESS_F6 std::string& TrimLineEnding(_Inout_ std::string& str) noexcept;
 
-// ----- ToString -----
+#pragma region ToString
 
 template<typename T>
 _NODISCARD inline const std::string ToString(_In_ const T& value)
@@ -47,12 +47,18 @@ _NODISCARD inline const std::string ToString(_In_ const T& value)
             return std::to_string(value);
     }
     else if constexpr (std::is_enum_v<T>)
-    {
         return std::to_string(etoi(value));
+    else if constexpr (std::is_pointer_v<T>)
+    {
+        // rvalue must be giving it a different address
+        const auto val2 = std::addressof(value);
+        std::ostringstream oss;
+        oss << val2;
+        return oss.str();
     }
     else
     {
-        static_assert(false, "No ToString implementation for type");
+        static_assert(false, "No ToString implementation:" __FUNCSIG__);
         return std::string();
     }
 }
@@ -96,9 +102,9 @@ _NODISCARD inline const std::string ToString(_In_ const char& value)
 // literal strings can't be passed by reference, so won't call the templated methods
 _NODISCARD inline const std::string ToString(_In_ const char* value) { return std::string(value); }
 _NODISCARD inline const std::string ToString(_In_ const wchar_t* value) { return ra::Narrow(value); }
+#pragma endregion
 
-// ----- ToWString -----
-
+#pragma region ToWString
 template<typename T>
 _NODISCARD inline const std::wstring ToWString(_In_ const T& value)
 {
@@ -106,7 +112,7 @@ _NODISCARD inline const std::wstring ToWString(_In_ const T& value)
     {
         if constexpr (std::is_same_v<T, char>)
         {
-            std::wstring wc{value};
+            std::wstring wc{ value };
             std::string mb(MB_CUR_MAX, '\0');
             Ensures(std::mbtowc(wc.data(), mb.data(), 8) != -1);
             return wc;
@@ -117,12 +123,18 @@ _NODISCARD inline const std::wstring ToWString(_In_ const T& value)
             return std::to_wstring(value);
     }
     else if constexpr (std::is_enum_v<T>)
-    {
         return std::to_wstring(etoi(value));
+    else if constexpr (std::is_pointer_v<T>)
+    {
+        // rvalue must be giving it a different address
+        const auto val2 = std::addressof(value);
+        std::wostringstream oss;
+        oss << val2;
+        return oss.str();
     }
     else
     {
-        static_assert(false, "No ToWString implementation for type");
+        static_assert(false, "No ToWString implementation: " __FUNCSIG__);
         return std::wstring();
     }
 }
@@ -166,8 +178,38 @@ _NODISCARD inline const std::wstring ToWString(_In_ const char& value)
 // literal strings can't be passed by reference, so won't call the templated methods
 _NODISCARD inline const std::wstring ToWString(_In_ const char* value) { return ra::Widen(value); }
 _NODISCARD inline const std::wstring ToWString(_In_ const wchar_t* value) { return std::wstring(value); }
+#pragma endregion
 
-// ----- string building -----
+#pragma region String Building
+/// <summary>
+/// Writes <paramref name="nTime"/> as a string depending on the format specified by <paramref name="pFormat"/>.
+/// </summary>
+/// <param name="pFormat">
+/// Format string. If this is <c>nullptr</c> the full time-stamp will be written in the form 12/31/18 15:30:40.
+/// </param> 
+/// <param name="nTime">Timestamp to convert.</param> 
+/// <returns><paramref name="nTime"/> as a string.</returns>
+/// <remarks>
+/// If you want to use <c>nullptr</c> for <paramref name="pFormat"/>, it has to be in the form of 
+/// <c>std::add_pointer_t{const CharT*}</c> (replace the braces with angle brackets).
+/// </remarks>
+template<typename CharT, typename = std::enable_if_t<is_char_v<CharT>>>
+_NODISCARD inline auto TimeStampToString(_In_opt_z_ const CharT* restrict pFormat, _In_ std::time_t nTime)
+{
+    if (pFormat == nullptr)
+    {
+        if constexpr (std::is_same_v<CharT, char>)
+            pFormat = "%c";
+        else if constexpr (std::is_same_v<CharT, wchar_t>)
+            pFormat = L"%c";
+    }
+
+    std::tm tm{};
+    Expects(localtime_s(&tm, &nTime) == 0);
+    std::basic_ostringstream<CharT> oss;
+    oss << std::put_time(&tm, pFormat);
+    return oss.str();
+}
 
 class StringBuilder
 {
@@ -280,11 +322,11 @@ public:
 
         if constexpr (std::is_integral_v<T>)
         {
-            if(sFormat.back() == 'c')
+            if (sFormat.back() == 'c')
                 oss << arg;
             else
             {
-                if(std::isdigit(ra::to_unsigned(sFormat.front())))
+                if (std::isdigit(ra::to_unsigned(sFormat.front())))
                 {
                     if (sFormat.front() == '0')
                         oss << std::setfill('0');
@@ -319,6 +361,8 @@ public:
 
             oss << arg;
         }
+        else if constexpr (std::is_pointer_v<T>)
+            oss << arg;
         else
         {
             // cannot use static_assert here because the code will get generated regardless of if its ever used
@@ -337,6 +381,14 @@ public:
         {
             int nCharacters = std::stoi(&sFormat.at(1));
             AppendSubString(arg, nCharacters);
+        }
+        else if (sFormat.front() == 'p')
+        {
+            // Temp
+            PendingString pPending;
+            pPending.String = (std::ostringstream{} << std::addressof(arg)).str();
+            pPending.DataType = PendingString::Type::String;
+            m_vPending.emplace_back(std::move(pPending));
         }
         else
         {
@@ -399,69 +451,69 @@ public:
         ++pScan;
         switch (*pScan)
         {
-            case '\0':
-                AppendSubString(pScan - 1, 1);
-                break;
-            case '%':
-                AppendSubString(pScan - 1, 1);
-                AppendPrintf(++pScan, value, std::forward<Ts>(args)...);
-                break;
-            case 'l': // assume ll, or li
-            case 'z': // assume zu
-                ++pScan;
-                _FALLTHROUGH;
-            case 's':
-            case 'd':
-            case 'u':
-            case 'f':
-            case 'g':
-                Append(value);
-                AppendPrintf(++pScan, std::forward<Ts>(args)...);
-                break;
+        case '\0':
+            AppendSubString(pScan - 1, 1);
+            break;
+        case '%':
+            AppendSubString(pScan - 1, 1);
+            AppendPrintf(++pScan, value, std::forward<Ts>(args)...);
+            break;
+        case 'l': // assume ll, or li
+        case 'z': // assume zu
+            ++pScan;
+            _FALLTHROUGH;
+        case 's':
+        case 'd':
+        case 'u':
+        case 'f':
+        case 'g':
+            Append(value);
+            AppendPrintf(++pScan, std::forward<Ts>(args)...);
+            break;
 
-            default:
-                std::string sFormat;
-                const CharT* pStart = pScan;
-                while (*pScan)
-                {
-                    const char c = gsl::narrow<char>(*pScan);
-                    sFormat.push_back(c);
-                    if (isalpha(to_unsigned(c)))
-                        break;
-
-                    ++pScan;
-                }
-
-                if (!*pScan)
-                {
-                    AppendSubString(pStart, pScan - pStart);
+        default:
+            std::string sFormat;
+            const CharT* pStart = pScan;
+            while (*pScan)
+            {
+                const char c = gsl::narrow<char>(*pScan);
+                sFormat.push_back(c);
+                if (isalpha(to_unsigned(c)))
                     break;
-                }
 
-                if (sFormat.length() > 2 && sFormat.at(sFormat.length() - 2) == '*')
+                ++pScan;
+            }
+
+            if (!*pScan)
+            {
+                AppendSubString(pStart, pScan - pStart);
+                break;
+            }
+
+            if (sFormat.length() > 2 && sFormat.at(sFormat.length() - 2) == '*')
+            {
+                const char c = sFormat.back();
+                sFormat.pop_back(); // remove 's'/'x'
+                sFormat.pop_back(); // remove '*'
+                sFormat.append(ra::ToString(value));
+                sFormat.push_back(c); // replace 's'/'x'
+
+                if constexpr (sizeof...(args) > 0)
                 {
-                    const char c = sFormat.back();
-                    sFormat.pop_back(); // remove 's'/'x'
-                    sFormat.pop_back(); // remove '*'
-                    sFormat.append(ra::ToString(value));
-                    sFormat.push_back(c); // replace 's'/'x'
-
-                    if constexpr (sizeof...(args) > 0)
-                    {
-                        AppendPrintfParameterizedFormat(++pScan, sFormat, std::forward<Ts>(args)...);
-                    }
-                    else
-                    {
-                        assert(!"not enough parameters provided");
-                        Append(sFormat);
-                    }
+                    AppendPrintfParameterizedFormat(++pScan, sFormat, std::forward<Ts>(args)...);
                 }
                 else
                 {
-                    AppendFormat(value, sFormat);
-                    AppendPrintf(++pScan, std::forward<Ts>(args)...);
+                    assert(!"not enough parameters provided");
+                    Append(sFormat);
                 }
-                break;
+            }
+            else
+            {
+                AppendFormat(value, sFormat);
+                AppendPrintf(++pScan, std::forward<Ts>(args)...);
+            }
+            break;
         }
     }
 
@@ -524,7 +576,7 @@ private:
             CharRef,
             WCharRef,
         };
-        Type DataType{Type::String};
+        Type DataType{ Type::String };
     };
 
     mutable std::vector<PendingString> m_vPending;
@@ -588,9 +640,9 @@ _NODISCARD inline auto StringPrintf(_In_z_ _Printf_format_string_ const CharT* c
         return std::string();
     }
 }
+#pragma endregion
 
-// ----- string parsing -----
-
+#pragma region String Parsing
 class Tokenizer
 {
 public:
@@ -697,17 +749,17 @@ private:
     const std::string& m_sString;
     size_t m_nPosition = 0;
 };
+#pragma endregion
 
-// ----- other -----
-
+#pragma region Other
 // More functions to be Unicode compatible w/o sacrificing MBCS
 /* A wrapper for converting a string to an unsigned long depending on _String */
 /* The template parameter does not need to be specified */
 template<typename CharT, typename = std::enable_if_t<ra::is_char_v<CharT>>>
 _Success_(0 < return < ULONG_MAX) _NODISCARD
     inline auto __cdecl tcstoul(_In_z_ const CharT* __restrict str,
-                                _Out_opt_ _Deref_post_z_ CharT** __restrict endptr = nullptr,
-                                _In_ int base = 0 /*auto-detect base*/)
+        _Out_opt_ _Deref_post_z_ CharT** __restrict endptr = nullptr,
+        _In_ int base = 0 /*auto-detect base*/)
 {
     auto ret = 0UL;
     if constexpr (std::is_same_v<CharT, char>)
@@ -729,7 +781,7 @@ _Success_(0 < return < ULONG_MAX) _NODISCARD
 /// <remarks>The template argument does not have to be specified.</remarks>
 template<typename CharT, typename = std::enable_if_t<ra::is_char_v<CharT>>>
 _NODISCARD _Success_(0 < return < strsz) inline auto __cdecl tcslen_s(_In_reads_or_z_(strsz) const CharT* const str,
-                                                                      _In_ std::size_t strsz = UINT16_MAX) noexcept
+    _In_ std::size_t strsz = UINT16_MAX) noexcept
 {
     assert(str != nullptr);
     std::size_t ret = 0U;
@@ -748,7 +800,7 @@ _NODISCARD _Success_(0 < return < strsz) inline auto __cdecl tcslen_s(_In_reads_
 /// </summary>
 template<typename CharT, typename = std::enable_if_t<is_char_v<CharT>>>
 GSL_SUPPRESS_F6 _NODISCARD bool StringStartsWith(_In_ const std::basic_string<CharT>& sString,
-                                                 _In_ const std::basic_string<CharT>& sMatch) noexcept
+    _In_ const std::basic_string<CharT>& sMatch) noexcept
 {
     if (sMatch.length() > sString.length())
         return false;
@@ -761,7 +813,7 @@ GSL_SUPPRESS_F6 _NODISCARD bool StringStartsWith(_In_ const std::basic_string<Ch
 /// </summary>
 template<typename CharT, typename = std::enable_if_t<is_char_v<CharT>>>
 GSL_SUPPRESS_F6 _NODISCARD bool StringStartsWith(_In_ const std::basic_string<CharT>& sString,
-                                                 _In_ const CharT* restrict sMatch) noexcept
+    _In_ const CharT* restrict sMatch) noexcept
 {
     const auto sMatchLen = tcslen_s(sMatch);
     if (sMatchLen > sString.length())
@@ -775,7 +827,7 @@ GSL_SUPPRESS_F6 _NODISCARD bool StringStartsWith(_In_ const std::basic_string<Ch
 /// </summary>
 template<typename CharT, typename = std::enable_if_t<is_char_v<CharT>>>
 GSL_SUPPRESS_F6 _NODISCARD bool StringStartsWith(_In_ const CharT* restrict sString,
-                                                 _In_ const CharT* restrict sMatch) noexcept
+    _In_ const CharT* restrict sMatch) noexcept
 {
     const auto sMatchLen = tcslen_s(sMatch);
     if (sMatchLen > tcslen_s(sString))
@@ -789,7 +841,7 @@ GSL_SUPPRESS_F6 _NODISCARD bool StringStartsWith(_In_ const CharT* restrict sStr
 /// </summary>
 template<typename CharT, typename = std::enable_if_t<is_char_v<CharT>>>
 GSL_SUPPRESS_F6 _NODISCARD bool StringEndsWith(_In_ const std::basic_string<CharT>& sString,
-                                               _In_ const std::basic_string<CharT>& sMatch) noexcept
+    _In_ const std::basic_string<CharT>& sMatch) noexcept
 {
     if (sMatch.length() > sString.length())
         return false;
@@ -802,7 +854,7 @@ GSL_SUPPRESS_F6 _NODISCARD bool StringEndsWith(_In_ const std::basic_string<Char
 /// </summary>
 template<typename CharT, typename = std::enable_if_t<is_char_v<CharT>>>
 GSL_SUPPRESS_F6 _NODISCARD bool StringEndsWith(_In_ const std::basic_string<CharT>& sString,
-                                               _In_ const CharT* restrict sMatch) noexcept
+    _In_ const CharT* restrict sMatch) noexcept
 {
     const auto sMatchLen = tcslen_s(sMatch);
     if (sMatchLen > sString.length())
@@ -816,7 +868,7 @@ GSL_SUPPRESS_F6 _NODISCARD bool StringEndsWith(_In_ const std::basic_string<Char
 /// </summary>
 template<typename CharT, typename = std::enable_if_t<is_char_v<CharT>>>
 GSL_SUPPRESS_F6 _NODISCARD bool StringEndsWith(_In_ const CharT* restrict sString,
-                                               _In_ const CharT* restrict sMatch) noexcept
+    _In_ const CharT* restrict sMatch) noexcept
 {
     const auto sMatchLen = tcslen_s(sMatch);
     const auto sStringLen = tcslen_s(sString);
@@ -825,6 +877,7 @@ GSL_SUPPRESS_F6 _NODISCARD bool StringEndsWith(_In_ const CharT* restrict sStrin
 
     return (std::basic_string<CharT>{sString}.compare(sStringLen - sMatchLen, sMatchLen, sMatch) == 0);
 }
+#pragma endregion
 
 } // namespace ra
 

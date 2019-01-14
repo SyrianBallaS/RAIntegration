@@ -173,9 +173,9 @@ std::string RA_RichPresenceInterpreter::DisplayString::GetDisplayString() const
             }
             else
             {
-                char buffer[32];
-                rc_format_value(buffer, sizeof(buffer), nValue, part.m_nFormat);
-                sResult.append(buffer);
+                std::array<char, 32> buffer{};
+                rc_format_value(std::data(buffer), sizeof(buffer), nValue, part.m_nFormat);
+                sResult.append(std::data(buffer));
             }
         }
     }

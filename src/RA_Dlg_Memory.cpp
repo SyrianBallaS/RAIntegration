@@ -561,8 +561,6 @@ void MemoryViewerControl::RenderMemViewer(HWND hTarget)
     lines -= 1; // Watch out for header
     m_nDisplayedLines = lines;
 
-    TCHAR bufferNative[64]{};
-
     int addr = m_nAddressOffset;
     addr -= (0x40); // Offset will be this quantity (push up four lines)...
 
@@ -585,6 +583,7 @@ void MemoryViewerControl::RenderMemViewer(HWND hTarget)
     {
         m_nDataStartXOffset = r.left + 10 * m_szFontSize.cx;
         std::array<unsigned char, 16> data{};
+        std::array<TCHAR, 64> bufferNative{};
         for (auto i = 0; i < lines && addr < ra::to_signed(g_MemManager.TotalBankSize()); ++i, addr += 16)
         {
             if (addr >= 0)
@@ -612,7 +611,7 @@ void MemoryViewerControl::RenderMemViewer(HWND hTarget)
 
                 g_MemManager.ActiveBankRAMRead(data.data(), addr, 16);
 
-                TCHAR* ptr = bufferNative + _stprintf_s(bufferNative, 11, TEXT("0x%06x  "), addr);
+                TCHAR* ptr = std::data(bufferNative) + _stprintf_s(std::data(bufferNative), 11, TEXT("0x%06x  "), addr);
                 switch (m_nDataSize)
                 {
                     case MemSize::EightBit:
@@ -632,7 +631,7 @@ void MemoryViewerControl::RenderMemViewer(HWND hTarget)
                         break;
                 }
 
-                DrawText(hMemDC, NativeStr(bufferNative).c_str(), ptr - bufferNative, &r,
+                DrawText(hMemDC, NativeStr(std::data(bufferNative)).c_str(), ptr - std::data(bufferNative), &r,
                          DT_TOP | DT_LEFT | DT_NOPREFIX);
 
                 if ((ra::to_signed(m_nWatchedAddress) & ~0x0F) == addr)
@@ -643,20 +642,20 @@ void MemoryViewerControl::RenderMemViewer(HWND hTarget)
                     switch (m_nDataSize)
                     {
                         case MemSize::EightBit:
-                            ptr = bufferNative + 10 + 3 * (m_nWatchedAddress & 0x0F);
+                            ptr = std::data(bufferNative) + 10 + 3 * (m_nWatchedAddress & 0x0F);
                             stride = 2;
                             break;
                         case MemSize::SixteenBit:
-                            ptr = bufferNative + 10 + 5 * ((m_nWatchedAddress & 0x0F) / 2);
+                            ptr = std::data(bufferNative) + 10 + 5 * ((m_nWatchedAddress & 0x0F) / 2);
                             stride = 4;
                             break;
                         case MemSize::ThirtyTwoBit:
-                            ptr = bufferNative + 10 + 9 * ((m_nWatchedAddress & 0x0F) / 4);
+                            ptr = std::data(bufferNative) + 10 + 9 * ((m_nWatchedAddress & 0x0F) / 4);
                             stride = 8;
                             break;
                     }
 
-                    r.left = 3 + (ptr - bufferNative) * m_szFontSize.cx;
+                    r.left = 3 + (ptr - std::data(bufferNative)) * m_szFontSize.cx;
                     DrawText(hMemDC, ptr, stride, &r, DT_TOP | DT_LEFT | DT_NOPREFIX);
 
                     SetTextColor(hMemDC, RGB(0, 0, 0));
@@ -694,20 +693,20 @@ void MemoryViewerControl::RenderMemViewer(HWND hTarget)
                             switch (m_nDataSize)
                             {
                                 case MemSize::EightBit:
-                                    ptr = bufferNative + 10 + 3 * j;
+                                    ptr = std::data(bufferNative) + 10 + 3 * j;
                                     stride = 2;
                                     break;
                                 case MemSize::SixteenBit:
-                                    ptr = bufferNative + 10 + 5 * (j / 2);
+                                    ptr = std::data(bufferNative) + 10 + 5 * (j / 2);
                                     stride = 4;
                                     break;
                                 case MemSize::ThirtyTwoBit:
-                                    ptr = bufferNative + 10 + 9 * (j / 4);
+                                    ptr = std::data(bufferNative) + 10 + 9 * (j / 4);
                                     stride = 8;
                                     break;
                             }
 
-                            r.left = 3 + (ptr - bufferNative) * m_szFontSize.cx;
+                            r.left = 3 + (ptr - std::data(bufferNative)) * m_szFontSize.cx;
                             DrawText(hMemDC, NativeStr(ptr).c_str(), stride, &r, DT_TOP | DT_LEFT | DT_NOPREFIX);
                         }
 
@@ -868,7 +867,7 @@ INT_PTR Dlg_Memory::MemoryProc(HWND hDlg, UINT nMsg, WPARAM wParam, LPARAM lPara
 
                 if (m_SearchResults.size() > 0)
                 {
-                    TCHAR buffer[1024]{};
+                    ra::tstring buffer{};
 
                     if (pDIS->itemID < 2)
                     {
@@ -877,10 +876,10 @@ INT_PTR Dlg_Memory::MemoryProc(HWND hDlg, UINT nMsg, WPARAM wParam, LPARAM lPara
                             try
                             {
                                 const std::string& sFirstLine = m_SearchResults.at(m_nPage).m_results.Summary();
-                                _stprintf_s(buffer, sizeof(buffer), _T("%s"), NativeStr(sFirstLine).c_str());
+                                buffer = NativeStr(sFirstLine);
                             } catch (const std::out_of_range& e)
                             {
-                                _stprintf_s(buffer, sizeof(buffer), _T("%s"), NativeStr(e.what()).c_str());
+                                buffer = NativeStr(e.what());
                             }
                         }
                         else
@@ -888,16 +887,15 @@ INT_PTR Dlg_Memory::MemoryProc(HWND hDlg, UINT nMsg, WPARAM wParam, LPARAM lPara
                             SetTextColor(pDIS->hDC, RGB(0, 100, 150));
                             const unsigned int nMatches = m_SearchResults.at(m_nPage).m_results.MatchingAddressCount();
                             if (nMatches > MIN_RESULTS_TO_DUMP)
-                                _stprintf_s(buffer, sizeof(buffer),
-                                            _T("Found %u matches! (Displaying first %u results)"), nMatches,
-                                            MIN_RESULTS_TO_DUMP);
+                                buffer = ra::StringPrintf(_T("Found %u matches! (Displaying first %u results)"),
+                                                          nMatches, MIN_RESULTS_TO_DUMP);
                             else if (nMatches == 0)
-                                _stprintf_s(buffer, sizeof(buffer), _T("Found *ZERO* matches!"));
+                                buffer = _T("Found *ZERO* matches!");
                             else
-                                _stprintf_s(buffer, sizeof(buffer), _T("Found %u matches!"), nMatches);
+                                buffer = ra::StringPrintf(_T("Found %u matches!"), nMatches);
                         }
 
-                        DrawText(pDIS->hDC, buffer, _tcslen(buffer), &pDIS->rcItem,
+                        DrawText(pDIS->hDC, std::data(buffer), _tcslen(std::data(buffer)), &pDIS->rcItem,
                                  DT_SINGLELINE | DT_LEFT | DT_NOPREFIX | DT_NOCLIP | DT_VCENTER | DT_END_ELLIPSIS);
                         SetTextColor(pDIS->hDC, GetSysColor(COLOR_WINDOWTEXT));
                     }
@@ -909,15 +907,11 @@ INT_PTR Dlg_Memory::MemoryProc(HWND hDlg, UINT nMsg, WPARAM wParam, LPARAM lPara
                             break;
 
                         unsigned int nVal = 0;
-                        UpdateSearchResult(result, nVal, buffer);
+                        buffer = UpdateSearchResult(result, nVal);
 
                         const CodeNotes::CodeNoteObj* pSavedNote = m_CodeNotes.FindCodeNote(result.nAddress);
                         if ((pSavedNote != nullptr) && (pSavedNote->Note().length() > 0))
-                        {
-                            std::ostringstream oss;
-                            oss << "   (" << pSavedNote->Note() << ")";
-                            _tcscat_s(buffer, NativeStr(oss.str()).c_str());
-                        }
+                            buffer = ra::StringPrintf("   (%s)", pSavedNote->Note());
 
                         COLORREF color{};
 
@@ -951,7 +945,7 @@ INT_PTR Dlg_Memory::MemoryProc(HWND hDlg, UINT nMsg, WPARAM wParam, LPARAM lPara
                         FillRect(pDIS->hDC, &pDIS->rcItem, hBrush);
                         DeleteObject(hBrush);
 
-                        std::wstring sBufferWide = ra::Widen(buffer);
+                        const auto sBufferWide{ra::Widen(buffer)};
                         DrawTextW(pDIS->hDC, sBufferWide.c_str(), sBufferWide.length(), &pDIS->rcItem,
                                   DT_SINGLELINE | DT_LEFT | DT_NOPREFIX | DT_NOCLIP | DT_VCENTER | DT_END_ELLIPSIS);
                     }
@@ -1195,9 +1189,9 @@ INT_PTR Dlg_Memory::MemoryProc(HWND hDlg, UINT nMsg, WPARAM wParam, LPARAM lPara
                 {
                     HWND hMemWatch = GetDlgItem(hDlg, IDC_RA_WATCHING);
 
-                    WCHAR sNewNoteWide[512];
-                    GetDlgItemTextW(hDlg, IDC_RA_MEMSAVENOTE, sNewNoteWide, 512);
-                    const std::string sNewNote = ra::Narrow(sNewNoteWide);
+                    std::array<wchar_t, 512> sNewNoteWide{};
+                    GetDlgItemTextW(hDlg, IDC_RA_MEMSAVENOTE, std::data(sNewNoteWide), 512);
+                    const std::string sNewNote = ra::Narrow(std::data(sNewNoteWide));
 
                     const ra::ByteAddress nAddr = MemoryViewerControl::getWatchedAddress();
                     const CodeNotes::CodeNoteObj* pSavedNote = m_CodeNotes.FindCodeNote(nAddr);
@@ -1205,16 +1199,14 @@ INT_PTR Dlg_Memory::MemoryProc(HWND hDlg, UINT nMsg, WPARAM wParam, LPARAM lPara
                     {
                         if (pSavedNote->Note().compare(sNewNote) != 0) //	New note is different
                         {
-                            char sWarning[4096];
-                            sprintf_s(sWarning, 4096,
-                                      "Address 0x%04x already stored with note:\n\n"
-                                      "%s\n"
-                                      "by %s\n"
-                                      "\n\n"
-                                      "Would you like to overwrite with\n\n"
-                                      "%s",
-                                      nAddr, pSavedNote->Note().c_str(), pSavedNote->Author().c_str(),
-                                      sNewNote.c_str());
+                            const auto sWarning = ra::StringPrintf(
+                                "Address 0x%04x already stored with note:\n\n"
+                                "%s\n"
+                                "by %s\n"
+                                "\n\n"
+                                "Would you like to overwrite with\n\n"
+                                "%s",
+                                nAddr, pSavedNote->Note(), pSavedNote->Author(), sNewNote);
 
                             if (MessageBoxW(hDlg, ra::Widen(sWarning).c_str(), L"Warning: overwrite note?", MB_YESNO) ==
                                 IDYES)
@@ -1240,9 +1232,9 @@ INT_PTR Dlg_Memory::MemoryProc(HWND hDlg, UINT nMsg, WPARAM wParam, LPARAM lPara
                 {
                     HWND hMemWatch = GetDlgItem(hDlg, IDC_RA_WATCHING);
 
-                    TCHAR sAddressWide[16];
-                    ComboBox_GetText(hMemWatch, sAddressWide, 16);
-                    const std::string sAddress = ra::Narrow(sAddressWide);
+                    std::array<TCHAR, 16> sAddressWide{};
+                    ComboBox_GetText(hMemWatch, std::data(sAddressWide), 16);
+                    const std::string sAddress = ra::Narrow(std::data(sAddressWide));
 
                     const ra::ByteAddress nAddr = MemoryViewerControl::getWatchedAddress();
                     m_CodeNotes.Remove(nAddr);
@@ -1253,7 +1245,7 @@ INT_PTR Dlg_Memory::MemoryProc(HWND hDlg, UINT nMsg, WPARAM wParam, LPARAM lPara
                     if (nIndex != CB_ERR)
                         ComboBox_DeleteString(hMemWatch, nIndex);
 
-                    ComboBox_SetText(hMemWatch, sAddressWide);
+                    ComboBox_SetText(hMemWatch, std::data(sAddressWide));
 
                     return FALSE;
                 }
@@ -1358,11 +1350,11 @@ INT_PTR Dlg_Memory::MemoryProc(HWND hDlg, UINT nMsg, WPARAM wParam, LPARAM lPara
                             const int nSel = ComboBox_GetCurSel(hMemWatch);
                             if (nSel != CB_ERR)
                             {
-                                TCHAR sAddr[64]{};
-                                if (ComboBox_GetLBText(hMemWatch, nSel, sAddr) > 0)
+                                std::array<const TCHAR, 64> sAddr{};
+                                if (ComboBox_GetLBText(hMemWatch, nSel, std::data(sAddr)) > 0)
                                 {
                                     ra::ByteAddress nAddr = static_cast<ra::ByteAddress>(
-                                        std::strtoul(ra::Narrow(sAddr).c_str(), nullptr, 16));
+                                        std::strtoul(ra::Narrow(std::data(sAddr)).c_str(), nullptr, 16));
                                     const CodeNotes::CodeNoteObj* pSavedNote = m_CodeNotes.FindCodeNote(nAddr);
                                     if (pSavedNote != nullptr && pSavedNote->Note().length() > 0)
                                         SetDlgItemTextW(hDlg, IDC_RA_MEMSAVENOTE,
@@ -1383,10 +1375,10 @@ INT_PTR Dlg_Memory::MemoryProc(HWND hDlg, UINT nMsg, WPARAM wParam, LPARAM lPara
                         {
                             OnWatchingMemChange();
 
-                            TCHAR sAddrBuffer[64];
-                            GetDlgItemText(hDlg, IDC_RA_WATCHING, sAddrBuffer, 64);
+                            std::array<TCHAR, 64> sAddrBuffer{};
+                            GetDlgItemText(hDlg, IDC_RA_WATCHING, std::data(sAddrBuffer), 64);
                             ra::ByteAddress nAddr = static_cast<ra::ByteAddress>(
-                                std::strtoul(ra::Narrow(sAddrBuffer).c_str(), nullptr, 16));
+                                std::strtoul(ra::Narrow(std::data(sAddrBuffer)).c_str(), nullptr, 16));
                             MemoryViewerControl::setAddress(
                                 (nAddr & ~(0xf)) - ((int)(MemoryViewerControl::m_nDisplayedLines / 2) << 4) + (0x50));
                             MemoryViewerControl::setWatchedAddress(nAddr);
@@ -1439,9 +1431,9 @@ INT_PTR Dlg_Memory::MemoryProc(HWND hDlg, UINT nMsg, WPARAM wParam, LPARAM lPara
 
 void Dlg_Memory::OnWatchingMemChange()
 {
-    TCHAR sAddrNative[1024];
-    GetDlgItemText(m_hWnd, IDC_RA_WATCHING, sAddrNative, 1024);
-    std::string sAddr = ra::Narrow(sAddrNative);
+    std::array<TCHAR, 1024> sAddrNative{};
+    GetDlgItemText(m_hWnd, IDC_RA_WATCHING, std::data(sAddrNative), 1024);
+    std::string sAddr = ra::Narrow(std::data(sAddrNative));
     const ra::ByteAddress nAddr = static_cast<ra::ByteAddress>(std::strtoul(sAddr.c_str() + 2, nullptr, 16));
 
     const CodeNotes::CodeNoteObj* pSavedNote = m_CodeNotes.FindCodeNote(nAddr);
@@ -1484,9 +1476,9 @@ void Dlg_Memory::RepopulateMemNotesFromFile()
             ComboBox_SetCurSel(hMemWatch, 0);
 
             //	Note: as this is sorted, we should grab the desc again
-            const TCHAR sAddrBuffer[64]{}; // param below expects LPCTSTR
-            ComboBox_GetLBText(hMemWatch, 0, sAddrBuffer);
-            const std::string sAddr = ra::Narrow(sAddrBuffer);
+            std::array<const TCHAR, 64> sAddrBuffer{};
+            ComboBox_GetLBText(hMemWatch, 0, std::data(sAddrBuffer));
+            const std::string sAddr = ra::Narrow(std::data(sAddrBuffer));
 
             const ra::ByteAddress nAddr = static_cast<ra::ByteAddress>(std::strtoul(sAddr.c_str() + 2, nullptr, 16));
             const CodeNotes::CodeNoteObj* pSavedNote = m_CodeNotes.FindCodeNote(nAddr);
@@ -1519,13 +1511,13 @@ void Dlg_Memory::OnLoad_NewRom()
         ra::ByteAddress start, end;
         if (GetSystemMemoryRange(start, end))
         {
-            TCHAR label[64]{};
+            ra::tstring label;
             if (g_MemManager.TotalBankSize() > 0x10000)
-                _stprintf_s(label, 64, TEXT("System Memory (0x%06X-0x%06X)"), start, end);
+                label = ra::StringPrintf(TEXT("System Memory (0x%06X-0x%06X)"), start, end);
             else
-                _stprintf_s(label, 64, TEXT("System Memory (0x%04X-0x%04X)"), start, end);
+                label = ra::StringPrintf(TEXT("System Memory (0x%04X-0x%04X)"), start, end);
 
-            SetDlgItemText(g_MemoryDialog.m_hWnd, IDC_RA_CBO_SEARCHSYSTEMRAM, label);
+            SetDlgItemText(g_MemoryDialog.m_hWnd, IDC_RA_CBO_SEARCHSYSTEMRAM, label.c_str());
             EnableWindow(GetDlgItem(g_MemoryDialog.m_hWnd, IDC_RA_CBO_SEARCHSYSTEMRAM), TRUE);
         }
         else
@@ -1536,13 +1528,13 @@ void Dlg_Memory::OnLoad_NewRom()
 
         if (GetGameMemoryRange(start, end))
         {
-            TCHAR label[64]{};
+            ra::tstring label;
             if (g_MemManager.TotalBankSize() > 0x10000)
-                _stprintf_s(label, 64, TEXT("System Memory (0x%06X-0x%06X)"), start, end);
+                label = ra::StringPrintf(TEXT("System Memory (0x%06X-0x%06X)"), start, end);
             else
-                _stprintf_s(label, 64, TEXT("System Memory (0x%06X-0x%06X)"), start, end);
+                label = ra::StringPrintf(TEXT("System Memory (0x%06X-0x%06X)"), start, end);
 
-            SetDlgItemText(g_MemoryDialog.m_hWnd, IDC_RA_CBO_SEARCHGAMERAM, label);
+            SetDlgItemText(g_MemoryDialog.m_hWnd, IDC_RA_CBO_SEARCHGAMERAM, label.c_str());
             EnableWindow(GetDlgItem(g_MemoryDialog.m_hWnd, IDC_RA_CBO_SEARCHGAMERAM), TRUE);
         }
         else
@@ -1582,32 +1574,31 @@ void Dlg_Memory::Invalidate()
 
 void Dlg_Memory::UpdateBits() const
 {
-    TCHAR sNewValue[64] = _T("");
+    ra::tstring sNewValue;
 
     if (g_MemManager.TotalBankSize() != 0 && MemoryViewerControl::GetDataSize() == MemSize::EightBit)
     {
         const ra::ByteAddress nAddr = MemoryViewerControl::getWatchedAddress();
         const unsigned char nVal = g_MemManager.ActiveBankRAMByteRead(nAddr);
 
-        _stprintf_s(sNewValue, 64, _T("      %d %d %d %d %d %d %d %d"), static_cast<int>((nVal & (1 << 7)) != 0),
-                    static_cast<int>((nVal & (1 << 6)) != 0), static_cast<int>((nVal & (1 << 5)) != 0),
-                    static_cast<int>((nVal & (1 << 4)) != 0), static_cast<int>((nVal & (1 << 3)) != 0),
-                    static_cast<int>((nVal & (1 << 2)) != 0), static_cast<int>((nVal & (1 << 1)) != 0),
-                    static_cast<int>((nVal & (1 << 0)) != 0));
+        sNewValue = ra::StringPrintf(_T("      %d %d %d %d %d %d %d %d"), static_cast<int>((nVal & (1 << 7)) != 0),
+                                     static_cast<int>((nVal & (1 << 6)) != 0), static_cast<int>((nVal & (1 << 5)) != 0),
+                                     static_cast<int>((nVal & (1 << 4)) != 0), static_cast<int>((nVal & (1 << 3)) != 0),
+                                     static_cast<int>((nVal & (1 << 2)) != 0), static_cast<int>((nVal & (1 << 1)) != 0),
+                                     static_cast<int>((nVal & (1 << 0)) != 0));
     }
 
-    TCHAR sOldValue[64];
-    GetDlgItemText(m_hWnd, IDC_RA_MEMBITS, sOldValue, 64);
-    if (_tcscmp(sNewValue, sOldValue) != 0)
-        SetDlgItemText(m_hWnd, IDC_RA_MEMBITS, sNewValue);
+    std::array<TCHAR, 64> sOldValue{};
+    GetDlgItemText(m_hWnd, IDC_RA_MEMBITS, std::data(sOldValue), 64);
+    if (sNewValue != std::data(sOldValue))
+        SetDlgItemText(m_hWnd, IDC_RA_MEMBITS, sNewValue.c_str());
 }
 
 void Dlg_Memory::SetWatchingAddress(unsigned int nAddr)
 {
     MemoryViewerControl::setWatchedAddress(nAddr);
 
-    char buffer[32];
-    sprintf_s(buffer, 32, "0x%06x", nAddr);
+    const auto buffer = ra::StringPrintf("0x%06x", nAddr);
     SetDlgItemText(g_MemoryDialog.GetHWND(), IDC_RA_WATCHING, NativeStr(buffer).c_str());
     UpdateBits();
 
@@ -1853,29 +1844,23 @@ bool Dlg_Memory::GetSelectedMemoryRange(ra::ByteAddress& start, ra::ByteAddress&
     return false;
 }
 
-void Dlg_Memory::UpdateSearchResult(const ra::services::SearchResults::Result& result, _Out_ unsigned int& nMemVal,
-                                    TCHAR (&buffer)[1024])
+ra::tstring Dlg_Memory::UpdateSearchResult(const ra::services::SearchResults::Result& result, _Out_ unsigned int& nMemVal)
 {
     nMemVal = g_MemManager.ActiveBankRAMRead(result.nAddress, result.nSize);
 
     switch (result.nSize)
     {
         case MemSize::ThirtyTwoBit:
-            _stprintf_s(buffer, sizeof(buffer), _T("0x%06x: 0x%08x"), result.nAddress, nMemVal);
-            break;
+            return ra::StringPrintf(_T("0x%06x: 0x%08x"), result.nAddress, nMemVal);
         case MemSize::SixteenBit:
-            _stprintf_s(buffer, sizeof(buffer), _T("0x%06x: 0x%04x"), result.nAddress, nMemVal);
-            break;
+            return ra::StringPrintf(_T("0x%06x: 0x%04x"), result.nAddress, nMemVal);
         default:
         case MemSize::EightBit:
-            _stprintf_s(buffer, sizeof(buffer), _T("0x%06x: 0x%02x"), result.nAddress, nMemVal);
-            break;
+            return ra::StringPrintf(_T("0x%06x: 0x%02x"), result.nAddress, nMemVal);
         case MemSize::Nibble_Lower:
-            _stprintf_s(buffer, sizeof(buffer), _T("0x%06xL: 0x%01x"), result.nAddress, nMemVal);
-            break;
+            return ra::StringPrintf(_T("0x%06xL: 0x%01x"), result.nAddress, nMemVal);
         case MemSize::Nibble_Upper:
-            _stprintf_s(buffer, sizeof(buffer), _T("0x%06xU: 0x%01x"), result.nAddress, nMemVal);
-            break;
+            return ra::StringPrintf( _T("0x%06xU: 0x%01x"), result.nAddress, nMemVal);
     }
 }
 

@@ -156,6 +156,8 @@ public:
         Assert::AreEqual(std::string("52e331"), StringPrintf("%x", 5432113));
         Assert::AreEqual(std::string("70AF4E"), StringPrintf("%X", 0b11100001010111101001110));
         Assert::AreEqual(std::string("70af4e"), StringPrintf("%x", 0b11100001010111101001110));
+
+        // AssertPointer was used to test "%p" by moving out of it's conditional temporarily
     }
 
     TEST_METHOD(TestWStringPrintf)
@@ -170,6 +172,8 @@ public:
 
         Assert::AreEqual(std::wstring(L"abc"), StringPrintf(L"%c%c%c", 'a', 'b', 'c'));
         Assert::AreEqual(std::wstring(L"616263"), StringPrintf(L"%02x%02x%02x", 'a', 'b', 'c'));
+
+        // AssertPointer was used to test "%p" by moving out of it's conditional temporarily
     }
 
     TEST_METHOD(TestStringStartsWith)

@@ -10,7 +10,7 @@
 
 inline constexpr std::array<const char*, 3> PROBLEM_STR{"Unknown", "Triggers at wrong time", "Didn't trigger at all"};
 gsl::index Dlg_AchievementsReporter::ms_nNumOccupiedRows = 0;
-char Dlg_AchievementsReporter::ms_lbxData[MAX_ACHIEVEMENTS][Dlg_AchievementsReporter::COL_SIZE.size()][MAX_TEXT_LEN]{};
+Dlg_AchievementsReporter::LbxData Dlg_AchievementsReporter::ms_lbxData{};
 
 Dlg_AchievementsReporter g_AchievementsReporterDialog;
 
@@ -56,19 +56,19 @@ void Dlg_AchievementsReporter::AddAchievementToListBox(HWND hList, const Achieve
         switch (ra::itoe<Column>(nPos))
         {
             case Column::Checked:
-                sprintf_s(LbxDataAt(ms_nNumOccupiedRows, nPos), MAX_TEXT_LEN, "%s", "");
+                Ensures(sprintf_s(std::data(LbxDataAt(ms_nNumOccupiedRows, nPos)), MAX_TEXT_LEN, "%s", "") >= 0);
                 break;
             case Column::Title:
-                sprintf_s(LbxDataAt(ms_nNumOccupiedRows, nPos), MAX_TEXT_LEN, pAch->Title().c_str());
+                Ensures(sprintf_s(std::data(LbxDataAt(ms_nNumOccupiedRows, nPos)), MAX_TEXT_LEN, "%s", pAch->Title().c_str()) >= 0);
                 break;
             case Column::Desc:
-                sprintf_s(LbxDataAt(ms_nNumOccupiedRows, nPos), MAX_TEXT_LEN, pAch->Description().c_str());
+                Ensures(sprintf_s(std::data(LbxDataAt(ms_nNumOccupiedRows, nPos)), MAX_TEXT_LEN, "%s", pAch->Description().c_str()) >= 0);
                 break;
             case Column::Author:
-                sprintf_s(LbxDataAt(ms_nNumOccupiedRows, nPos), MAX_TEXT_LEN, pAch->Author().c_str());
+                Ensures(sprintf_s(std::data(LbxDataAt(ms_nNumOccupiedRows, nPos)), MAX_TEXT_LEN, "%s", pAch->Author().c_str()) >= 0);
                 break;
             case Column::Achieved:
-                sprintf_s(LbxDataAt(ms_nNumOccupiedRows, nPos), MAX_TEXT_LEN, !pAch->Active() ? "Yes" : "No");
+                Ensures(sprintf_s(std::data(LbxDataAt(ms_nNumOccupiedRows, nPos)), MAX_TEXT_LEN, "%s", !pAch->Active() ? "Yes" : "No") >= 0);
                 break;
             default:
                 ASSERT(!"Unknown col!");
@@ -79,7 +79,7 @@ void Dlg_AchievementsReporter::AddAchievementToListBox(HWND hList, const Achieve
     {
         // difference_type could be 8 bytes.
         const auto nPos{gsl::narrow<int>(std::distance(COL_TITLE.cbegin(), it))};
-        ra::tstring sStr{NativeStr(LbxDataAt(ms_nNumOccupiedRows, nPos))}; // Scoped cache
+        ra::tstring sStr{NativeStr(std::data(LbxDataAt(ms_nNumOccupiedRows, nPos)))}; // Scoped cache
         LV_ITEM item{};
         item.mask = ra::to_unsigned(LVIF_TEXT);
         item.iItem = ms_nNumOccupiedRows;
@@ -152,9 +152,9 @@ INT_PTR CALLBACK Dlg_AchievementsReporter::AchievementsReporterProc(HWND hDlg, U
                             return FALSE;
                     }
 
-                    TCHAR sBugReportCommentIn[4096];
-                    GetDlgItemText(hDlg, IDC_RA_BROKENACHIEVEMENTREPORTCOMMENT, sBugReportCommentIn, 4096);
-                    std::string sBugReportComment = ra::Narrow(sBugReportCommentIn);
+                    std::array<TCHAR, 4096> sBugReportCommentIn{};
+                    GetDlgItemText(hDlg, IDC_RA_BROKENACHIEVEMENTREPORTCOMMENT, std::data(sBugReportCommentIn), 4096);
+                    std::string sBugReportComment = ra::Narrow(std::data(sBugReportCommentIn));
 
                     const auto nProblemType = bProblem1Sel ? 1 : bProblem2Sel ? 2U : 0u; // 0==?
                     const auto sProblemTypeNice = PROBLEM_STR.at(nProblemType);
@@ -189,17 +189,13 @@ INT_PTR CALLBACK Dlg_AchievementsReporter::AchievementsReporterProc(HWND hDlg, U
                     {
                         if (doc["Success"].GetBool())
                         {
-                            char buffer[2048];
-                            sprintf_s(buffer, 2048,
-                                      "Submitted OK!\n"
-                                      "\n"
-                                      "Thankyou for reporting that bug(s), and sorry it hasn't worked correctly.\n"
-                                      "\n"
-                                      "The development team will investigate this bug as soon as possible\n"
-                                      "and we will send you a message on RetroAchievements.org\n"
-                                      "as soon as we have a solution.\n"
-                                      "\n"
-                                      "Thanks again!");
+                            constexpr auto buffer = 
+                                "Submitted OK!\n\n"
+                                "Thank you for reporting that bug(s), and sorry it hasn't worked correctly.\n\n"
+                                "The development team will investigate this bug as soon as possible\n"
+                                "and we will send you a message on RetroAchievements.org\n\n"
+                                "as soon as we have a solution.\n"
+                                "Thanks again!";
 
                             MessageBox(hDlg, NativeStr(buffer).c_str(), TEXT("Success!"), MB_OK);
                             EndDialog(hDlg, TRUE);
@@ -207,14 +203,11 @@ INT_PTR CALLBACK Dlg_AchievementsReporter::AchievementsReporterProc(HWND hDlg, U
                         }
                         else
                         {
-                            char buffer[2048];
-                            sprintf_s(buffer, 2048,
-                                      "Failed!\n"
-                                      "\n"
-                                      "Response From Server:\n"
-                                      "\n"
-                                      "Error code: %d",
-                                      doc.GetParseError());
+                            const auto buffer = ra::StringPrintf(
+                                "Failed!\n\n"
+                                "Response From Server:\n\n"
+                                "Error code: %d",
+                                doc.GetParseError());
                             MessageBox(hDlg, NativeStr(buffer).c_str(), TEXT("Error from server!"), MB_OK);
                             return FALSE;
                         }

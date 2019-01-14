@@ -198,31 +198,31 @@ API bool CCONV _RA_ConfirmLoadNewRom(bool bQuittingApp)
 
     if (g_pCoreAchievements->HasUnsavedChanges())
     {
-        char buffer[1024];
-        sprintf_s(buffer, 1024,
+        const auto buffer = ra::StringPrintf(
             "You have unsaved changes in the Core Achievements set.\n"
             "If you %s you will lose these changes.\n"
-            "%s", sCurrentAction, sNextAction);
+            "%s",
+            sCurrentAction, sNextAction);
 
         nResult = MessageBox(g_RAMainWnd, NativeStr(buffer).c_str(), TEXT("Warning"), MB_ICONWARNING | MB_YESNO);
     }
     if (g_pUnofficialAchievements->HasUnsavedChanges())
     {
-        char buffer[1024];
-        sprintf_s(buffer, 1024,
+        const auto buffer = ra::StringPrintf(
             "You have unsaved changes in the Unofficial Achievements set.\n"
             "If you %s you will lose these changes.\n"
-            "%s", sCurrentAction, sNextAction);
+            "%s",
+            sCurrentAction, sNextAction);
 
         nResult = MessageBox(g_RAMainWnd, NativeStr(buffer).c_str(), TEXT("Warning"), MB_ICONWARNING | MB_YESNO);
     }
     if (g_pLocalAchievements->HasUnsavedChanges())
     {
-        char buffer[1024];
-        sprintf_s(buffer, 1024,
+        const auto buffer = ra::StringPrintf(
             "You have unsaved changes in the Local Achievements set.\n"
             "If you %s you will lose these changes.\n"
-            "%s", sCurrentAction, sNextAction);
+            "%s",
+            sCurrentAction, sNextAction);
 
         nResult = MessageBox(g_RAMainWnd, NativeStr(buffer).c_str(), TEXT("Warning"), MB_ICONWARNING | MB_YESNO);
     }
@@ -284,11 +284,9 @@ static unsigned int IdentifyRom(const BYTE* pROM, unsigned int nROMSize, std::st
             {
                 RA_LOG("Could not identify game with MD5 %s\n", sCurrentROMMD5.c_str());
 
-                char buffer[64];
-                ZeroMemory(buffer, 64);
-                RA_GetEstimatedGameTitle(buffer);
-                buffer[sizeof(buffer) - 1] = '\0'; // ensure buffer is null terminated
-                std::string sEstimatedGameTitle(buffer);
+                std::array<char, 64> buffer{}; // ensures null termination
+                RA_GetEstimatedGameTitle(buffer.data());
+                std::string sEstimatedGameTitle{buffer.data()};
 
                  Dlg_GameTitle::DoModalDialog(g_hThisDLLInst, g_RAMainWnd, sCurrentROMMD5, sEstimatedGameTitle, nGameId);
             }
@@ -337,7 +335,7 @@ static void ActivateGame(unsigned int nGameId)
             ra::services::ServiceLocator::Get<ra::services::IAudioSystem>().PlayAudioFile(L"Overlay\\info.wav");
             ra::services::ServiceLocator::GetMutable<ra::ui::viewmodels::OverlayManager>().QueueMessage(
                 L"Playing in Softcore Mode",
-                bLeaderboardsEnabled ? L"Leaderboard submissions will be canceled." : L"");
+                bLeaderboardsEnabled ? std::wstring{L"Leaderboard submissions will be canceled."} : std::wstring{});
         }
     }
     else
@@ -1140,13 +1138,6 @@ char* _MallocAndBulkReadFileToBuffer(const wchar_t* sFilename, long& nFileSizeOu
     fclose(pf);
 
     return pRawFileOut;
-}
-
-std::string _TimeStampToString(time_t nTime)
-{
-    char buffer[64];
-    ctime_s(buffer, 64, &nTime);
-    return std::string(buffer);
 }
 
 namespace ra {

@@ -86,9 +86,8 @@ void LeaderboardManager::SubmitLeaderboardEntry(const RA_Leaderboard& lb, unsign
     }
     else
     {
-        char sValidationSig[50];
-        sprintf_s(sValidationSig, 50, "%u%s%u", lb.ID(), RAUsers::LocalUser().Username().c_str(), lb.ID());
-        std::string sValidationMD5 = RAGenerateMD5(sValidationSig);
+        const auto sValidationSig = ra::StringPrintf("%zu%s%zu", lb.ID(), RAUsers::LocalUser().Username(), lb.ID());
+        const auto sValidationMD5 = RAGenerateMD5(sValidationSig);
 
         PostArgs args;
         args['u'] = RAUsers::LocalUser().Username();

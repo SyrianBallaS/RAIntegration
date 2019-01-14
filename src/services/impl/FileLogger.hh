@@ -58,12 +58,8 @@ public:
             tMilliseconds = 0;
         }
 
-        std::tm tTimeStruct;
-        localtime_s(&tTimeStruct, &tTime);
-
-        char sBuffer[16];
-        strftime(sBuffer, sizeof(sBuffer), "%H%M%S", &tTimeStruct);
-        sprintf_s(&sBuffer[6], sizeof(sBuffer) - 6, ".%03u|", tMilliseconds);
+        auto sBuffer = TimeStampToString("%H%M%S", tTime);
+        sBuffer.insert(6, StringPrintf(".%03u|", tMilliseconds));
 
         // WinXP hangs if we try to acquire a mutex while the DLL in initializing. Since DllMain writes
         // a header block to the log file, we have to do that without using a mutex. Luckily, we're not
@@ -73,11 +69,11 @@ public:
         if (ServiceLocator::Exists<IThreadPool>())
         {
             std::scoped_lock<std::mutex> oLock(m_oMutex);
-            LogMessage(*m_pWriter, sBuffer, level, sMessage);
+            LogMessage(*m_pWriter, sBuffer.c_str(), level, sMessage);
         }
         else
         {
-            LogMessage(*m_pWriter, sBuffer, level, sMessage);
+            LogMessage(*m_pWriter, sBuffer.c_str(), level, sMessage);
         }
 
         // if writing to a file, flush immediately

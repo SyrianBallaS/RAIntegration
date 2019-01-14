@@ -257,12 +257,12 @@ BOOL DoBlockingImageUpload(UploadType nType, const std::string& sFilename, std::
 
     if (hConnect != nullptr)
     {
-        WCHAR wBuffer[1024];
-        mbstowcs_s(&nTemp, wBuffer, 1024, sRequestedPage.c_str(), strlen(sRequestedPage.c_str()) + 1);
+        std::array<wchar_t, 1024> wBuffer{};
+        mbstowcs_s(&nTemp, std::data(wBuffer), 1024, sRequestedPage.c_str(), std::size(sRequestedPage) + 1);
 
         hRequest = WinHttpOpenRequest(hConnect,
             L"POST",
-            wBuffer,
+            std::data(wBuffer),
             nullptr,
             WINHTTP_NO_REFERER,
             WINHTTP_DEFAULT_ACCEPT_TYPES,

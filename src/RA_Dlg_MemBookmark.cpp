@@ -703,21 +703,20 @@ void Dlg_MemBookmark::ExportJSON()
     };
 
     // TODO: With all known options, only a raw array works. We'll have suppress bounds.1 when running that ruleset
-    wchar_t buf[BUF_SIZE + 16UL]{}; // Extra capacity to prevent buffer overrun
-    {
-        const auto sDefaultFilename{ra::StringPrintf(L"%u-Bookmarks.txt", pGameContext.GameId())};
-        Expects(swprintf_s(buf, BUF_SIZE, L"%s", sDefaultFilename.c_str()) >= 0);
+    std::array<wchar_t, BUF_SIZE + 16UL> buf{}; // Extra capacity to prevent buffer overrun
 
-        if (std::wcslen(buf) > ofn.nMaxFile)
-        {
-            PathTooLong();
-            return;
-        }
-        ofn.lpstrFile = buf;
+    const auto sDefaultFilename{ra::StringPrintf(L"%u-Bookmarks.txt", pGameContext.GameId())};
+    Expects(swprintf_s(buf.data(), BUF_SIZE, L"%s", sDefaultFilename.c_str()) >= 0);
+
+    if (sDefaultFilename.length() > ofn.nMaxFile)
+    {
+        PathTooLong();
+        return;
     }
+    ofn.lpstrFile = buf.data();
 
     const auto sFilePath{ra::StringPrintf(L"%s%s", g_sHomeDir, RA_DIR_BOOKMARKS)};
-    if (sFilePath.length() > (ofn.nMaxFile - std::wcslen(buf)))
+    if (sFilePath.length() > (ofn.nMaxFile - sDefaultFilename.length()))
     {
         PathTooLong();
         return;
@@ -747,8 +746,7 @@ void Dlg_MemBookmark::ExportJSON()
     }
     doc.AddMember("Bookmarks", bookmarks, allocator);
 
-    Ensures(swprintf_s(buf, BUF_SIZE, L"%s", ofn.lpstrFile) >= 0);
-    _WriteBufferToFile(buf, doc);
+    _WriteBufferToFile(ofn.lpstrFile, doc);
 }
 
 void Dlg_MemBookmark::ImportFromFile(std::wstring&& sFilename)
@@ -827,24 +825,25 @@ std::wstring Dlg_MemBookmark::ImportDialog()
         return std::wstring();
     };
 
-    wchar_t buf[BUF_SIZE + 16UL]{};
-    {
-        const auto sDefaultFilename{ra::StringPrintf(L"%u-Bookmarks.txt", pGameContext.GameId())};
-        Expects(swprintf_s(buf, BUF_SIZE, L"%s", sDefaultFilename.c_str()) >= 0);
-        if (std::wcslen(buf) > ofn.nMaxFile)
-            return PathTooLong();
-        ofn.lpstrFile = buf;
-    }
+    std::array<wchar_t, BUF_SIZE + 16UL> buf{};
+
+    const auto sDefaultFilename{ra::StringPrintf(L"%u-Bookmarks.txt", pGameContext.GameId())};
+    Expects(swprintf_s(buf.data(), BUF_SIZE, L"%s", sDefaultFilename.c_str()) >= 0);
+    if (sDefaultFilename.length() > ofn.nMaxFile)
+        return PathTooLong();
+    ofn.lpstrFile = buf.data();
 
     const auto sFilePath{ra::StringPrintf(L"%s%s", g_sHomeDir, RA_DIR_BOOKMARKS)};
-    if (sFilePath.length() > (ofn.nMaxFile - gsl::narrow<DWORD>(std::wcslen(buf))))
+    if (sFilePath.length() > (ofn.nMaxFile - sDefaultFilename.length()))
         return PathTooLong();
     ofn.lpstrInitialDir = sFilePath.c_str();
 
     if (::GetOpenFileNameW(&ofn) == 0)
         return std::wstring();
-    Ensures(swprintf_s(buf, BUF_SIZE, L"%s", ofn.lpstrFile) >= 0);
-    return buf;
+    // we need a second buffer
+    std::array<wchar_t, BUF_SIZE + 16UL> buf2{};
+    Ensures(swprintf_s(buf2.data(), BUF_SIZE, L"%s", ofn.lpstrFile) >= 0);
+    return buf2.data();
 }
 
 void Dlg_MemBookmark::OnLoad_NewRom()

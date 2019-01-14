@@ -15,10 +15,10 @@ namespace impl {
 WindowsFileSystem::WindowsFileSystem() noexcept
 {
     // determine the home directory from the executable's path
-    wchar_t sBuffer[MAX_PATH]{};
-    GetModuleFileNameW(nullptr, sBuffer, MAX_PATH);
-    PathRemoveFileSpecW(sBuffer);
-    m_sBaseDirectory = sBuffer;
+    std::array<wchar_t, _MAX_PATH> sBuffer{};
+    GetModuleFileNameW(nullptr, std::data(sBuffer), _MAX_PATH);
+    PathRemoveFileSpecW(std::data(sBuffer));
+    m_sBaseDirectory = std::data(sBuffer);
     if (!m_sBaseDirectory.empty())
     {
         if (m_sBaseDirectory.back() != L'\\')

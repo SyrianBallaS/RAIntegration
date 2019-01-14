@@ -39,9 +39,9 @@ void RA_Leaderboard::ParseFromString(const char* sBuffer, const char* sFormat)
 
 std::string RA_Leaderboard::FormatScore(unsigned int nValue) const
 {
-    char buffer[32];
-    rc_format_value(buffer, sizeof(buffer), nValue, m_nFormat);
-    return std::string(buffer);
+    std::array<char, 32> buffer{};
+    rc_format_value(std::data(buffer), sizeof(buffer), nValue, m_nFormat);
+    return {std::data(buffer)};
 }
 
 void RA_Leaderboard::Reset() noexcept
