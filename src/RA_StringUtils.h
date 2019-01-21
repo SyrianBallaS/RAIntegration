@@ -283,7 +283,7 @@ public:
                 const int nIndex = sFormat.find('.');
                 if (nIndex != std::string::npos)
                 {
-                    int nPrecision = std::stoi(sFormat.c_str() + nIndex + 1);
+                    const int nPrecision = std::stoi(&sFormat.at(nIndex + 1));
                     oss.precision(nPrecision);
                     oss << std::fixed;
                 }
@@ -680,7 +680,7 @@ public:
     GSL_SUPPRESS_F6 const char* GetPointer(size_t nPosition) const noexcept
     {
         if (nPosition >= m_sString.length())
-            return &m_sString.back() + 1;
+            return &m_sString.back() + 1; // This seems dangerous
 
         return &m_sString.at(nPosition);
     }

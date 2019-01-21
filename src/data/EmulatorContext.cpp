@@ -79,23 +79,23 @@ void EmulatorContext::Initialize(EmulatorID nEmulatorId)
     }
 }
 
-static unsigned long long ParseVersion(const char* sVersion)
+static unsigned long long ParseVersion(const std::string& sVersion)
 {
-    char* pPart{};
-    const auto major = strtoull(sVersion, &pPart, 10);
-    Expects(pPart != nullptr);
-    if (*pPart == '.')
-        ++pPart;
+    std::size_t pos{};
+    const auto major = std::stoull(sVersion, &pos);
 
-    const auto minor = strtoul(pPart, &pPart, 10);
-    if (*pPart == '.')
-        ++pPart;
+    if (sVersion.at(pos) == '.')
+        ++pos;
 
-    const auto patch = strtoul(pPart, &pPart, 10);
-    if (*pPart == '.')
-        ++pPart;
+    const auto minor = std::stoul(&sVersion.at(pos), &pos);
+    if (sVersion.at(pos) == '.')
+        ++pos;
 
-    const auto revision = strtoul(pPart, &pPart, 10);
+    const auto patch = std::stoul(&sVersion.at(pos), &pos);
+    if (sVersion.at(pos) == '.')
+        ++pos;
+
+    const auto revision = std::stoul(&sVersion.at(pos), &pos);
     // 64-bit max signed value is 9223 37203 68547 75807
     auto version = (major * 100000) + minor;
     version = (version * 100000) + patch;

@@ -59,7 +59,7 @@ std::vector<size_t> MemManager::GetBankIDs() const
 
 unsigned int MemManager::ActiveBankRAMRead(ra::ByteAddress nOffs, MemSize size) const
 {
-    unsigned char buffer[4]{};
+    std::array<unsigned char, 4> buffer{};
     switch (size)
     {
         case MemSize::Bit_0:
@@ -86,11 +86,11 @@ unsigned int MemManager::ActiveBankRAMRead(ra::ByteAddress nOffs, MemSize size) 
             return ActiveBankRAMByteRead(nOffs);
         default:
         case MemSize::SixteenBit:
-            ActiveBankRAMRead(buffer, nOffs, 2);
-            return buffer[0] | (buffer[1] << 8);
+            ActiveBankRAMRead(gsl::make_span(buffer.data(), 2), nOffs);
+            return buffer.at(0) | (buffer.at(1) << 8);
         case MemSize::ThirtyTwoBit:
-            ActiveBankRAMRead(buffer, nOffs, 4);
-            return buffer[0] | (buffer[1] << 8) | (buffer[2] << 16) | (buffer[3] << 24);
+            ActiveBankRAMRead(gsl::make_span(buffer.data(), 4), nOffs);
+            return buffer.at(0) | (buffer.at(1) << 8) | (buffer.at(2) << 16) | (buffer.at(3) << 24);
     }
 }
 
@@ -111,13 +111,13 @@ unsigned char MemManager::ActiveBankRAMByteRead(ra::ByteAddress nOffs) const
     return unsigned char();
 }
 
-void MemManager::ActiveBankRAMRead(unsigned char* restrict buffer, ra::ByteAddress nOffs, size_t count) const
+void MemManager::ActiveBankRAMRead(gsl::span<unsigned char> buffer, ra::ByteAddress nOffs) const
 {
-    Expects(buffer != nullptr);
+    Expects(!buffer.empty());
     GSL_SUPPRESS_F23 const BankData* bank = nullptr;
 
-    auto bankID = 0U;
-    const auto numBanks = m_Banks.size();
+    int bankID{};
+    const auto numBanks = ra::to_signed(m_Banks.size());
     do
     {
         if (bankID == numBanks)
@@ -135,21 +135,22 @@ void MemManager::ActiveBankRAMRead(unsigned char* restrict buffer, ra::ByteAddre
     } while (true);
 
     gsl::not_null<_RAMByteReadFn*> reader{gsl::make_not_null(bank->Reader)};
-
+    gsl::index i = 0;
+    auto count = buffer.size();
     while (nOffs + count >= bank->BankSize)
     {
         size_t firstBankCount = bank->BankSize - nOffs;
         count -= firstBankCount;
 
         while (firstBankCount-- > 0)
-            *buffer++ = reader(nOffs++);
+            buffer[i++] = reader(nOffs++);
 
         nOffs -= bank->BankSize;
         bankID++;
         if (bankID >= numBanks)
         {
             while (count-- > 0)
-                *buffer++ = 0;
+                buffer[i++] = 0;
             return;
         }
 
@@ -157,8 +158,8 @@ void MemManager::ActiveBankRAMRead(unsigned char* restrict buffer, ra::ByteAddre
         reader = gsl::make_not_null(bank->Reader);
     }
 
-    while (count-- > 0)
-        *buffer++ = reader(nOffs++);
+    while ((count > 0) && (i < count))
+        buffer[i++] = reader(nOffs++);
 }
 
 void MemManager::ActiveBankRAMByteWrite(ra::ByteAddress nOffs, unsigned int nVal)

@@ -68,9 +68,11 @@ bool JsonFileConfiguration::Load(const std::wstring& sFilename)
         const rapidjson::Value& positions = doc["Window Positions"];
         if (positions.IsObject())
         {
-            for (rapidjson::Value::ConstMemberIterator iter = positions.MemberBegin(); iter != positions.MemberEnd(); ++iter)
+            // Value is using pointers, so we're wrapping it in a span
+            auto valSpan = gsl::make_span(positions.MemberBegin(), positions.MemberEnd());
+            for (auto iter = valSpan.cbegin(); iter != valSpan.cend(); ++iter)
             {
-                WindowPosition& pos = m_mWindowPositions[iter->name.GetString()];
+                WindowPosition& pos = m_mWindowPositions.at(iter->name.GetString());
                 pos.oPosition.X = pos.oPosition.Y = pos.oSize.Width = pos.oSize.Height = INT32_MIN;
 
                 if (iter->value.HasMember("X"))

@@ -612,7 +612,7 @@ void MemoryViewerControl::RenderMemViewer(HWND hTarget)
                     }
                 }
 
-                g_MemManager.ActiveBankRAMRead(data.data(), addr, 16);
+                g_MemManager.ActiveBankRAMRead(gsl::make_span(data.data(), 16), addr);
 
                 TCHAR* ptr = bufferNative + _stprintf_s(bufferNative, 11, TEXT("0x%06x  "), addr);
                 switch (m_nDataSize)

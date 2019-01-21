@@ -53,7 +53,7 @@ void SearchResults::Initialize(unsigned int nAddress, unsigned int nBytes, MemSi
     {
         const auto nBlockSize = (nBytes > MAX_BLOCK_SIZE) ? MAX_BLOCK_SIZE : nBytes;
         auto& block = AddBlock(nAddress, nBlockSize + nPadding);
-        g_MemManager.ActiveBankRAMRead(block.GetBytes(), block.GetAddress(), nBlockSize + nPadding);
+        g_MemManager.ActiveBankRAMRead(gsl::make_span(block.GetBytes(), nBlockSize + nPadding), block.GetAddress());
 
         nAddress += nBlockSize;
         nBytes -= nBlockSize;
@@ -197,7 +197,7 @@ void SearchResults::ProcessBlocks(const SearchResults& srSource, std::function<b
         unsigned char* pMemory = vMemory.data();
         const unsigned char* pPrev = block.GetBytes();
 
-        g_MemManager.ActiveBankRAMRead(pMemory, block.GetAddress(), block.GetSize());
+        g_MemManager.ActiveBankRAMRead(gsl::make_span(pMemory, block.GetSize()), block.GetAddress());
 
         for (unsigned int i = 0; i < block.GetSize() - nPadding; ++i)
         {
@@ -246,7 +246,7 @@ void SearchResults::ProcessBlocksNibbles(const SearchResults& srSource, unsigned
         if (block.GetSize() > vMemory.size())
             vMemory.resize(block.GetSize());
 
-        g_MemManager.ActiveBankRAMRead(vMemory.data(), block.GetAddress(), block.GetSize());
+        g_MemManager.ActiveBankRAMRead(gsl::make_span(vMemory.data(), block.GetSize()), block.GetAddress());
 
         for (unsigned int i = 0; i < block.GetSize() - nPadding; ++i)
         {
