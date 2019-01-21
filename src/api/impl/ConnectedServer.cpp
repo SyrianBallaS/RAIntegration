@@ -6,6 +6,7 @@
 #include "RA_User.h"
 
 #include "services\Http.hh"
+#include "services\IHttpRequester.hh"
 #include "services\ILocalStorage.hh"
 #include "services\ServiceLocator.hh"
 
@@ -22,7 +23,9 @@ _NODISCARD static bool HandleHttpError(_In_ const ra::services::Http::Response& 
 {
     if (httpResponse.StatusCode() != ra::services::Http::StatusCode::OK)
     {
-        pResponse.Result = ApiResult::Error;
+        const auto& pHttpRequester = ra::services::ServiceLocator::Get<ra::services::IHttpRequester>();
+        const bool bRetry = pHttpRequester.IsRetryable(ra::etoi(httpResponse.StatusCode()));
+        pResponse.Result = bRetry ? ApiResult::Incomplete : ApiResult::Error;
         pResponse.ErrorMessage = ra::StringPrintf("HTTP error code: %d", ra::etoi(httpResponse.StatusCode()));
         return true;
     }
@@ -323,6 +326,26 @@ FetchUserUnlocks::Response ConnectedServer::FetchUserUnlocks(const FetchUserUnlo
             for (const auto& unlocked : UserUnlocks.GetArray())
                 response.UnlockedAchievements.insert(unlocked.GetUint());
         }
+    }
+
+    return std::move(response);
+}
+
+AwardAchievement::Response ConnectedServer::AwardAchievement(const AwardAchievement::Request& request) noexcept
+{
+    AwardAchievement::Response response;
+    rapidjson::Document document;
+    std::string sPostData;
+
+    AppendUrlParam(sPostData, "a", std::to_string(request.AchievementId));
+    AppendUrlParam(sPostData, "h", request.Hardcore ? "1" : "0");
+    if (!request.GameHash.empty())
+        AppendUrlParam(sPostData, "m", request.GameHash);
+
+    if (DoRequest(m_sHost, AwardAchievement::Name(), "awardachievement", sPostData, response, document))
+    {
+        response.Result = ApiResult::Success;
+        GetRequiredJsonField(response.NewPlayerScore, document, "Score", response);
     }
 
     return std::move(response);

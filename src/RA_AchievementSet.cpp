@@ -110,22 +110,21 @@ size_t AchievementSet::GetAchievementIndex(const Achievement& Ach)
 void AchievementSet::Clear() noexcept
 {
     m_Achievements.clear();
-    m_bProcessingActive = true;
 }
 
 void AchievementSet::Test()
 {
-    if (!m_bProcessingActive)
+    auto& pRuntime = ra::services::ServiceLocator::GetMutable<ra::services::AchievementRuntime>();
+    if (pRuntime.IsPaused())
         return;
 
     for (auto pAchievement : m_Achievements)
     {
-        if (pAchievement->Active())
+        if (pAchievement && pAchievement->Active())
             pAchievement->SetDirtyFlag(Achievement::DirtyFlags::Conditions);
     }
 
     std::vector<ra::services::AchievementRuntime::Change> vChanges;
-    const auto& pRuntime = ra::services::ServiceLocator::Get<ra::services::AchievementRuntime>();
     pRuntime.Process(vChanges);
 
     for (const auto& pChange : vChanges)
@@ -145,8 +144,11 @@ void AchievementSet::Test()
 
             case ra::services::AchievementRuntime::ChangeType::AchievementTriggered:
             {
-                auto* pAchievement = Find(pChange.nId);
-                pAchievement->SetActive(false);
+                const auto& pGameContext = ra::services::ServiceLocator::Get<ra::data::GameContext>();
+                pGameContext.AwardAchievement(pChange.nId);
+                auto* pAchievement = pGameContext.FindAchievement(pChange.nId);
+                if (!pAchievement)
+                    break;
 
 #ifndef RA_UTEST
                 //	Reverse find where I am in the list:
@@ -165,44 +167,6 @@ void AchievementSet::Test()
                     if (g_AchievementEditorDialog.ActiveAchievement() == pAchievement)
                         g_AchievementEditorDialog.LoadAchievement(pAchievement, TRUE);
                 }
-
-                if (ra::services::ServiceLocator::Get<ra::data::UserContext>().IsLoggedIn())
-                {
-                    if (g_nActiveAchievementSet != Type::Core)
-                    {
-                        ra::services::ServiceLocator::Get<ra::services::IAudioSystem>().PlayAudioFile(L"Overlay\\unlock.wav");
-                        ra::services::ServiceLocator::GetMutable<ra::ui::viewmodels::OverlayManager>().QueueMessage(
-                            L"Test: Achievement Unlocked",
-                            ra::StringPrintf(L"%s (%u) (Unofficial)", pAchievement->Title(), pAchievement->Points()),
-                            ra::ui::ImageType::Badge, pAchievement->BadgeImageURI());
-                    }
-                    else if (pAchievement->Modified())
-                    {
-                        ra::services::ServiceLocator::Get<ra::services::IAudioSystem>().PlayAudioFile(L"Overlay\\unlock.wav");
-                        ra::services::ServiceLocator::GetMutable<ra::ui::viewmodels::OverlayManager>().QueueMessage(
-                            L"Modified: Achievement Unlocked",
-                            ra::StringPrintf(L"%s (%u)", pAchievement->Title(), pAchievement->Points()),
-                            ra::ui::ImageType::Badge, pAchievement->BadgeImageURI());
-                    }
-                    else if (g_bRAMTamperedWith)
-                    {
-                        ra::services::ServiceLocator::Get<ra::services::IAudioSystem>().PlayAudioFile(L"Overlay\\acherror.wav");
-                        ra::services::ServiceLocator::GetMutable<ra::ui::viewmodels::OverlayManager>().QueueMessage(
-                            L"(RAM tampered with!): Achievement Unlocked",
-                            ra::StringPrintf(L"%s (%u)", pAchievement->Title(), pAchievement->Points()),
-                            ra::ui::ImageType::Badge, pAchievement->BadgeImageURI());
-                    }
-                    else
-                    {
-                        PostArgs args;
-                        args['u'] = RAUsers::LocalUser().Username();
-                        args['t'] = RAUsers::LocalUser().Token();
-                        args['a'] = std::to_string(pAchievement->ID());
-                        args['h'] = _RA_HardcoreModeIsActive() ? "1" : "0";
-
-                        RAWeb::CreateThreadedHTTPRequest(RequestSubmitAwardAchievement, args);
-                    }
-                }
 #endif
 
                 if (pAchievement->GetPauseOnTrigger())
@@ -218,59 +182,6 @@ void AchievementSet::Test()
             }
         }
     }
-}
-
-void AchievementSet::Reset() noexcept
-{
-    for (auto pAchievement : m_Achievements)
-    {
-        if (pAchievement)
-            pAchievement->Reset();
-    }
-
-    m_bProcessingActive = true;
-}
-
-bool AchievementSet::SaveToFile() const
-{
-    const auto& pGameContext = ra::services::ServiceLocator::Get<ra::data::GameContext>();
-
-    // Commits local achievements to the file
-    auto& pLocalStorage = ra::services::ServiceLocator::GetMutable<ra::services::ILocalStorage>();
-    auto pData = pLocalStorage.WriteText(ra::services::StorageItemType::UserAchievements, std::to_wstring(static_cast<unsigned int>(pGameContext.GameId())));
-    if (pData == nullptr)
-        return false;
-
-    pData->WriteLine(_RA_IntegrationVersion()); // version used to create the file
-    pData->WriteLine(pGameContext.GameTitle());
-
-    for (const auto pAchievement : g_pLocalAchievements->m_Achievements)
-    {
-        if (!pAchievement)
-            continue;
-
-        pData->Write(std::to_string(pAchievement->ID()));
-        pData->Write(":");
-        pData->Write(pAchievement->CreateMemString());
-        pData->Write(":");
-        pData->Write(pAchievement->Title()); // TODO: escape colons
-        pData->Write(":");
-        pData->Write(pAchievement->Description()); // TODO: escape colons
-        pData->Write("::::");            // progress indicator/max/format
-        pData->Write(pAchievement->Author());
-        pData->Write(":");
-        pData->Write(std::to_string(pAchievement->Points()));
-        pData->Write(":");
-        pData->Write(std::to_string(pAchievement->CreatedDate()));
-        pData->Write(":");
-        pData->Write(std::to_string(pAchievement->ModifiedDate()));
-        pData->Write(":::"); // upvotes/downvotes
-        pData->Write(pAchievement->BadgeImageURI());
-
-        pData->WriteLine();
-    }
-
-    return true;
 }
 
 bool AchievementSet::HasUnsavedChanges() const noexcept

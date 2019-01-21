@@ -53,9 +53,6 @@ HWND g_RAMainWnd = nullptr;
 ConsoleID g_ConsoleID = ConsoleID::UnknownConsoleID;	//	Currently active Console ID
 bool g_bRAMTamperedWith = false;
 
-inline static constexpr unsigned int PROCESS_WAIT_TIME{ 100U };
-inline static unsigned int g_nProcessTimer{ 0U };
-
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, _UNUSED LPVOID)
 {
     if (dwReason == DLL_PROCESS_ATTACH)
@@ -288,7 +285,7 @@ static unsigned int IdentifyRom(const BYTE* pROM, unsigned int nROMSize, std::st
                 RA_GetEstimatedGameTitle(buffer.data());
                 std::string sEstimatedGameTitle{buffer.data()};
 
-                 Dlg_GameTitle::DoModalDialog(g_hThisDLLInst, g_RAMainWnd, sCurrentROMMD5, sEstimatedGameTitle, nGameId);
+                Dlg_GameTitle::DoModalDialog(g_hThisDLLInst, g_RAMainWnd, sCurrentROMMD5, sEstimatedGameTitle, nGameId);
             }
             else
             {
@@ -352,8 +349,6 @@ static void ActivateGame(unsigned int nGameId)
     g_AchievementOverlay.OnLoad_NewRom();
     g_MemBookmarkDialog.OnLoad_NewRom();
 
-    g_nProcessTimer = 0;
-
     ra::services::ServiceLocator::GetMutable<ra::ui::viewmodels::WindowManager>().RichPresenceMonitor.UpdateDisplayString();
 }
 
@@ -386,19 +381,36 @@ API unsigned int CCONV _RA_IdentifyRom(const BYTE* pROM, unsigned int nROMSize)
     return nGameId;
 }
 
+static void ActivateHash(const std::string& sHash, unsigned int nGameId)
+{
+    auto& pGameContext = ra::services::ServiceLocator::GetMutable<ra::data::GameContext>();
+    pGameContext.SetGameHash(sHash);
+
+    // if the hash didn't resolve, we still want to ping with "Playing GAMENAME"
+    if (nGameId == 0)
+    {
+        char buffer[64]{};
+        RA_GetEstimatedGameTitle(buffer);
+        buffer[sizeof(buffer) - 1] = '\0'; // ensure buffer is null terminated
+        std::wstring sEstimatedGameTitle = ra::ToWString(buffer);
+        if (sEstimatedGameTitle.empty())
+            sEstimatedGameTitle = L"Unknown";
+        pGameContext.SetGameTitle(sEstimatedGameTitle);
+
+        ra::services::ServiceLocator::GetMutable<ra::data::SessionTracker>().BeginSession(nGameId);
+    }
+}
+
 API void CCONV _RA_ActivateGame(unsigned int nGameId)
 {
     ActivateGame(nGameId);
 
-    // if the hash was stored, use it
+    // if the hash was captured, use it
     if (ra::services::ServiceLocator::Exists<PendingRom>())
     {
         const auto& pPendingRom = ra::services::ServiceLocator::Get<PendingRom>();
         if (nGameId == pPendingRom.nGameId)
-        {
-            auto& pGameContext = ra::services::ServiceLocator::GetMutable<ra::data::GameContext>();
-            pGameContext.SetGameHash(pPendingRom.sMD5);
-        }
+            ActivateHash(pPendingRom.sMD5, nGameId);
     }
 }
 
@@ -411,25 +423,24 @@ API int CCONV _RA_OnLoadNewRom(const BYTE* pROM, unsigned int nROMSize)
 
     // if a ROM was provided, store the hash, even if it didn't match anything
     if (pROM && nROMSize)
-    {
-        auto& pGameContext = ra::services::ServiceLocator::GetMutable<ra::data::GameContext>();
-        pGameContext.SetGameHash(sCurrentROMMD5);
-    }
+        ActivateHash(sCurrentROMMD5, nGameId);
 
     return 0;
 }
 
 API void CCONV _RA_OnReset()
 {
-    g_pActiveAchievements->Reset();
-    ra::services::ServiceLocator::GetMutable<ra::services::ILeaderboardManager>().Reset();
+    // Temporarily disable achievements while the system is resetting. They will automatically re-enable when
+    // DoAchievementsFrame is called if the trigger is not active. Prevents most unexpected triggering caused
+    // by resetting the emulator.
+    ra::services::ServiceLocator::GetMutable<ra::services::AchievementRuntime>().ResetActiveAchievements();
 
-    g_nProcessTimer = 0;
+    ra::services::ServiceLocator::GetMutable<ra::services::ILeaderboardManager>().Reset();
 }
 
 API void CCONV _RA_InstallMemoryBank(int nBankID, void* pReader, void* pWriter, int nBankSize)
 {
-    g_MemManager.AddMemoryBank(static_cast<size_t>(nBankID), (_RAMByteReadFn*)pReader, (_RAMByteWriteFn*)pWriter, static_cast<size_t>(nBankSize));
+    g_MemManager.AddMemoryBank(ra::to_unsigned(nBankID), (_RAMByteReadFn*)pReader, (_RAMByteWriteFn*)pWriter, ra::to_unsigned(nBankSize));
     g_MemoryDialog.AddBank(nBankID);
 }
 
@@ -509,47 +520,6 @@ API int CCONV _RA_HandleHTTPResults()
                 }
                 break;
 
-                case RequestSubmitAwardAchievement:
-                {
-                    //	Response to an achievement being awarded:
-                    const ra::AchievementID nAchID = static_cast<ra::AchievementID>(doc["AchievementID"].GetUint());
-                    const Achievement* pAch = g_pCoreAchievements->Find(nAchID);
-                    if (pAch == nullptr)
-                        pAch = g_pUnofficialAchievements->Find(nAchID);
-                    if (pAch != nullptr)
-                    {
-                        if (!doc.HasMember("Error"))
-                        {
-                            ra::services::ServiceLocator::Get<ra::services::IAudioSystem>().PlayAudioFile(L"Overlay\\unlock.wav");
-                            ra::services::ServiceLocator::GetMutable<ra::ui::viewmodels::OverlayManager>().QueueMessage(
-                                L"Achievement Unlocked", ra::StringPrintf(L"%s (%u)", pAch->Title(), pAch->Points()),
-                                ra::ui::ImageType::Badge, pAch->BadgeImageURI());
-                            g_AchievementsDialog.OnGet_Achievement(*pAch);
-
-                            auto& pUserContext = ra::services::ServiceLocator::GetMutable<ra::data::UserContext>();
-                            pUserContext.SetScore(doc["Score"].GetUint());
-                        }
-                        else
-                        {
-                            ra::services::ServiceLocator::Get<ra::services::IAudioSystem>().PlayAudioFile(L"Overlay\\acherror.wav");
-                            ra::services::ServiceLocator::GetMutable<ra::ui::viewmodels::OverlayManager>().QueueMessage(
-                                L"Achievement Unlocked (Error)", ra::StringPrintf(L"%s (%u)", pAch->Title(), pAch->Points()),
-                                ra::ui::ImageType::Badge, pAch->BadgeImageURI());
-                            g_AchievementsDialog.OnGet_Achievement(*pAch);
-
-                            ra::services::ServiceLocator::GetMutable<ra::ui::viewmodels::OverlayManager>().QueueMessage(
-                                L"Error submitting achievement", ra::Widen(doc["Error"].GetString()),
-                                ra::ui::ImageType::Badge, pAch->BadgeImageURI());
-                        }
-                    }
-                    else
-                    {
-                        ASSERT(!"RequestSubmitAwardAchievement responded, but cannot find achievement ID!");
-                        RA_LOG("RequestSubmitAwardAchievement responded, but cannot find achievement with ID %u", nAchID);
-                    }
-                }
-                break;
-
                 case RequestNews:
                     _WriteBufferToFile(g_sHomeDir + RA_NEWS_FILENAME, doc);
                     g_AchievementOverlay.InstallNewsArticlesFromFile();
@@ -604,7 +574,7 @@ API HMENU CCONV _RA_CreatePopupMenu()
         AppendMenu(hRA, pConfiguration.IsFeatureEnabled(ra::services::Feature::Hardcore) ? MF_CHECKED : MF_UNCHECKED, IDM_RA_HARDCORE_MODE, TEXT("&Hardcore Mode"));
         AppendMenu(hRA, MF_SEPARATOR, 0U, nullptr);
 
-        AppendMenu(hRA, MF_POPUP, reinterpret_cast<UINT_PTR>(hRA_LB), TEXT("Leaderboards"));
+        GSL_SUPPRESS_TYPE1 AppendMenu(hRA, MF_POPUP, reinterpret_cast<UINT_PTR>(hRA_LB), TEXT("Leaderboards"));
         AppendMenu(hRA_LB, pConfiguration.IsFeatureEnabled(ra::services::Feature::Leaderboards) ? MF_CHECKED : MF_UNCHECKED, IDM_RA_TOGGLELEADERBOARDS, TEXT("Enable &Leaderboards"));
         AppendMenu(hRA_LB, MF_SEPARATOR, 0U, nullptr);
         AppendMenu(hRA_LB, pConfiguration.IsFeatureEnabled(ra::services::Feature::LeaderboardNotifications) ? MF_CHECKED : MF_UNCHECKED, IDM_RA_TOGGLE_LB_NOTIFICATIONS, TEXT("Display Challenge Notification"));
@@ -989,7 +959,6 @@ API void CCONV _RA_OnLoadState(const char* sFilename)
         ra::services::ServiceLocator::Get<ra::services::AchievementRuntime>().LoadProgress(sFilename);
         ra::services::ServiceLocator::GetMutable<ra::services::ILeaderboardManager>().Reset();
         g_MemoryDialog.Invalidate();
-        g_nProcessTimer = PROCESS_WAIT_TIME;
 
         for (size_t i = 0; i < g_pActiveAchievements->NumAchievements(); ++i)
             g_pActiveAchievements->GetAchievement(i).SetDirtyFlag(Achievement::DirtyFlags::Conditions);
@@ -1000,13 +969,8 @@ API void CCONV _RA_DoAchievementsFrame()
 {
     if (ra::services::ServiceLocator::Get<ra::data::UserContext>().IsLoggedIn() && g_pActiveAchievements != nullptr)
     {
-        if (g_nProcessTimer >= PROCESS_WAIT_TIME)
-        {
-            g_pActiveAchievements->Test();
-            ra::services::ServiceLocator::GetMutable<ra::services::ILeaderboardManager>().Test();
-        }
-        else
-            g_nProcessTimer++;
+        g_pActiveAchievements->Test();
+        ra::services::ServiceLocator::GetMutable<ra::services::ILeaderboardManager>().Test();
 
         g_MemoryDialog.Invalidate();
     }
@@ -1128,7 +1092,7 @@ char* _MallocAndBulkReadFileToBuffer(const wchar_t* sFilename, long& nFileSizeOu
 
     //	malloc() must be managed!
     //	NB. By adding +1, we allow for a single \0 character :)
-    char* pRawFileOut = (char*)malloc((nFileSizeOut + 1) * sizeof(char));
+    char* pRawFileOut = static_cast<char*>(std::malloc((nFileSizeOut + 1) * sizeof(char)));
     if (pRawFileOut)
     {
         ZeroMemory(pRawFileOut, nFileSizeOut + 1);
@@ -1149,8 +1113,10 @@ BrowseCallbackProc(_In_ HWND hwnd, _In_ UINT uMsg, _In_ _UNUSED LPARAM lParam, _
     ASSERT(uMsg != BFFM_VALIDATEFAILED);
     if (uMsg == BFFM_INITIALIZED)
     {
-        const auto path{ reinterpret_cast<LPCTSTR>(lpData) };
-        ::SendMessage(hwnd, ra::to_unsigned(BFFM_SETSELECTION), 0U, reinterpret_cast<LPARAM>(path));
+        LPCTSTR path{};
+        GSL_SUPPRESS_TYPE1 path = reinterpret_cast<LPCTSTR>(lpData);
+        GSL_SUPPRESS_TYPE1 ::SendMessage(hwnd, ra::to_unsigned(BFFM_SETSELECTION), 0U, reinterpret_cast<LPARAM>(path));
+
     }
     return 0;
 }
@@ -1171,7 +1137,7 @@ std::string GetFolderFromDialog()
 
     bi.ulFlags = BIF_USENEWUI | BIF_VALIDATE;
     bi.lpfn    = ra::BrowseCallbackProc;
-    bi.lParam  = reinterpret_cast<LPARAM>(g_sHomeDir.c_str());
+    GSL_SUPPRESS_TYPE1 bi.lParam = reinterpret_cast<LPARAM>(g_sHomeDir.c_str());
     
     std::string ret;
     {

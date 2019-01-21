@@ -139,8 +139,8 @@ void ImageRepository::FetchImage(ImageType nType, const std::string& sName)
     {
         if (response.StatusCode() == ra::services::Http::StatusCode::OK)
         {
-            auto nFileSize = static_cast<size_t>(ra::services::ServiceLocator::Get<ra::services::IFileSystem>().GetFileSize(sFilename));
-            RA_LOG_INFO("Wrote %zu bytes to %s", nFileSize, ra::Narrow(sFilename).c_str());
+            auto nFileSize = ra::services::ServiceLocator::Get<ra::services::IFileSystem>().GetFileSize(sFilename);
+            RA_LOG_INFO("Wrote %l bytes to %s", nFileSize, ra::Narrow(sFilename).c_str());
         }
         else
         {
@@ -198,14 +198,15 @@ static HRESULT ConvertBitmapSource(_In_ RECT rcDest, _In_ IWICBitmapSource* pOri
         if (SUCCEEDED(hr))
         {
             hr = pConverter->Initialize(static_cast<IWICBitmapSource*>(pScaler), // Input bitmap to convert
-                GUID_WICPixelFormat32bppBGR,				// &GUID_WICPixelFormat32bppBGR,
-                WICBitmapDitherTypeNone,					// Specified dither patterm
-                nullptr,									// Specify a particular palette 
-                0.f,										// Alpha threshold
-                WICBitmapPaletteTypeCustom);				// Palette translation type
+                GUID_WICPixelFormat32bppBGR,                // &GUID_WICPixelFormat32bppBGR,
+                WICBitmapDitherTypeNone,                    // Specified dither pattern
+                nullptr,                                    // Specify a particular palette 
+                0.f,                                        // Alpha threshold
+                WICBitmapPaletteTypeCustom);                // Palette translation type
 
-                                                            // Store the converted bitmap as ppToRenderBitmapSource 
+            // Store the converted bitmap as ppToRenderBitmapSource 
             if (SUCCEEDED(hr))
+                GSL_SUPPRESS_TYPE1
                 pConverter->QueryInterface(IID_IWICBitmapSource, reinterpret_cast<void**>(&pToRenderBitmapSource));
         }
 
@@ -235,15 +236,13 @@ static HRESULT CreateDIBFromBitmapSource(_In_ IWICBitmapSource* pToRenderBitmapS
     // Create a DIB section based on Bitmap Info
     // BITMAPINFO Struct must first be setup before a DIB can be created.
     // Note that the height is negative for top-down bitmaps
-    BITMAPINFOHEADER info_header{
-        sizeof(BITMAPINFOHEADER),      // biSize
-        static_cast<LONG>(nWidth),
-        -static_cast<LONG>(nHeight),
-        WORD{ 1 },                     // biPlanes
-        WORD{ 32 },                    // biBitCount
-        static_cast<DWORD>(BI_RGB)
-    };
-    BITMAPINFO bminfo{ info_header };
+    BITMAPINFOHEADER info_header{sizeof(BITMAPINFOHEADER), // biSize
+                                 to_signed(nWidth),
+                                 -to_signed(nHeight),
+                                 WORD{1},  // biPlanes
+                                 WORD{32}, // biBitCount
+                                 DWORD{BI_RGB}};
+    BITMAPINFO bminfo{info_header};
     void *pvImageBits = nullptr;
 
     auto hWindow = GetActiveWindow();
@@ -304,13 +303,13 @@ HBITMAP ImageRepository::LoadLocalPNG(const std::wstring& sFilename, size_t nWid
 
     // Decode the source image to IWICBitmapSource
     CComPtr<IWICBitmapDecoder> pDecoder;
-    HRESULT hr = g_pIWICFactory->CreateDecoderFromFilename(ra::Widen(sFilename).c_str(),			// Image to be decoded
-        nullptr,						// Do not prefer a particular vendor
-        GENERIC_READ,                   // Desired read access to the file
-        WICDecodeMetadataCacheOnDemand, // Cache metadata when needed
-        &pDecoder);                     // Pointer to the decoder
+    HRESULT hr = g_pIWICFactory->CreateDecoderFromFilename(ra::Widen(sFilename).c_str(), // Image to be decoded
+                                                           nullptr,      // Do not prefer a particular vendor
+                                                           GENERIC_READ, // Desired read access to the file
+                                                           WICDecodeMetadataCacheOnDemand, // Cache metadata when needed
+                                                           &pDecoder);                     // Pointer to the decoder
 
-                                        // Retrieve the first frame of the image from the decoder
+    // Retrieve the first frame of the image from the decoder
     CComPtr<IWICBitmapFrameDecode> pFrame;
     if (SUCCEEDED(hr))
         hr = pDecoder->GetFrame(0, &pFrame);
@@ -319,6 +318,7 @@ HBITMAP ImageRepository::LoadLocalPNG(const std::wstring& sFilename, size_t nWid
     CComPtr<IWICBitmapSource> pOriginalBitmapSource;
     if (SUCCEEDED(hr))
     {
+        GSL_SUPPRESS_TYPE1
         hr = pFrame->QueryInterface(IID_IWICBitmapSource, reinterpret_cast<void**>(&pOriginalBitmapSource));
         if (SUCCEEDED(hr))
         {
@@ -330,7 +330,8 @@ HBITMAP ImageRepository::LoadLocalPNG(const std::wstring& sFilename, size_t nWid
     // Scale the original IWICBitmapSource to the client rect size and convert the pixel format
     CComPtr<IWICBitmapSource> pToRenderBitmapSource;
     if (SUCCEEDED(hr))
-        hr = ConvertBitmapSource({ 0, 0, static_cast<LONG>(nWidth), static_cast<LONG>(nHeight) }, pOriginalBitmapSource, *&pToRenderBitmapSource);
+        hr = ConvertBitmapSource({0, 0, to_signed(nWidth), to_signed(nHeight)}, pOriginalBitmapSource,
+                                 *&pToRenderBitmapSource);
 
     // Create a DIB from the converted IWICBitmapSource
     HBITMAP hBitmap = nullptr;
@@ -404,7 +405,9 @@ HBITMAP ImageRepository::GetImage(ImageType nType, const std::string& sName)
 
 HBITMAP ImageRepository::GetHBitmap(const ImageReference& pImage)
 {
-    HBITMAP hBitmap = reinterpret_cast<HBITMAP>(pImage.GetData());
+    HBITMAP hBitmap{};
+    GSL_SUPPRESS_TYPE1 hBitmap = reinterpret_cast<HBITMAP>(pImage.m_nData);
+
     if (hBitmap == nullptr)
     {
         auto pImageRepository = dynamic_cast<ImageRepository*>(&ra::services::ServiceLocator::GetMutable<IImageRepository>());
@@ -414,18 +417,17 @@ HBITMAP ImageRepository::GetHBitmap(const ImageReference& pImage)
             if (hBitmap == nullptr)
                 return pImageRepository->GetDefaultImage(pImage.Type());
 
-            auto& pMutableImage = const_cast<ImageReference&>(pImage);
-            pMutableImage.SetData(reinterpret_cast<unsigned long>(hBitmap));
+            GSL_SUPPRESS_TYPE1 pImage.m_nData = reinterpret_cast<unsigned long>(hBitmap);
 
             // ImageReference will release the reference
-            pImageRepository->AddReference(pMutableImage);
+            pImageRepository->AddReference(pImage);
         }
     }
 
     return hBitmap;
 }
 
-void ImageRepository::AddReference(ImageReference& pImage)
+void ImageRepository::AddReference(const ImageReference& pImage)
 {
     if (pImage.Name().empty())
         return;
@@ -443,7 +445,7 @@ void ImageRepository::AddReference(ImageReference& pImage)
 void ImageRepository::ReleaseReference(ImageReference& pImage) noexcept
 {
     // if data isn't set, we don't have a reference to release.
-    if (pImage.GetData() == 0)
+    if (pImage.m_nData == 0)
         return;
 
     HBitmapMap* mMap = GetBitmapMap(pImage.Type());
@@ -463,7 +465,7 @@ void ImageRepository::ReleaseReference(ImageReference& pImage) noexcept
         }
     }
 
-    pImage.SetData(0ULL);
+    pImage.m_nData = {};
 }
 
 bool ImageRepository::HasReferencedImageChanged(ImageReference& pImage) const
@@ -471,9 +473,9 @@ bool ImageRepository::HasReferencedImageChanged(ImageReference& pImage) const
     if (pImage.Type() == ra::ui::ImageType::None)
         return false;
 
-    const auto hBitmapBefore = pImage.GetData();
+    const auto hBitmapBefore = pImage.m_nData;
     GetHBitmap(pImage); // TBD: Is the return value supposed to be discarded?
-    return (pImage.GetData() != hBitmapBefore);
+    return (pImage.m_nData != hBitmapBefore);
 }
 
 } // namespace gdi

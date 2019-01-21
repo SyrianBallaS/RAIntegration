@@ -26,20 +26,37 @@ WindowsFileSystem::WindowsFileSystem() noexcept
     }
 }
 
+GSL_SUPPRESS_F6
+const std::wstring& WindowsFileSystem::MakeAbsolute(std::wstring& sBuffer, const std::wstring& sPath) const noexcept
+{
+    if (!PathIsRelativeW(sPath.c_str()))
+        return sPath;
+
+    sBuffer.reserve(m_sBaseDirectory.length() + sPath.length());
+    sBuffer.assign(m_sBaseDirectory);
+    sBuffer.append(sPath);
+    return sBuffer;
+}
+
 bool WindowsFileSystem::DirectoryExists(const std::wstring& sDirectory) const noexcept
 {
-    const DWORD nAttrib = GetFileAttributesW(sDirectory.c_str());
+    std::wstring sBuffer;
+    const auto& sAbsolutePath = MakeAbsolute(sBuffer, sDirectory);
+    const DWORD nAttrib = GetFileAttributesW(sAbsolutePath.c_str());
     return (nAttrib != INVALID_FILE_ATTRIBUTES) && (nAttrib & FILE_ATTRIBUTE_DIRECTORY);
 }
 
 bool WindowsFileSystem::CreateDirectory(const std::wstring& sDirectory) const noexcept
 {
-    return static_cast<bool>(CreateDirectoryW(sDirectory.c_str(), nullptr));
+    std::wstring sBuffer;
+    const auto& sAbsolutePath = MakeAbsolute(sBuffer, sDirectory);
+    return (CreateDirectoryW(sAbsolutePath.c_str(), nullptr) != 0);
 }
 
 size_t WindowsFileSystem::GetFilesInDirectory(const std::wstring& sDirectory, _Inout_ std::vector<std::wstring>& vResults) const
 {
-    std::wstring sSearchString = sDirectory;
+    std::wstring sBuffer;
+    std::wstring sSearchString = MakeAbsolute(sBuffer, sDirectory);
     sSearchString += L"\\*";
 
     WIN32_FIND_DATAW ffdFile;
@@ -60,18 +77,26 @@ size_t WindowsFileSystem::GetFilesInDirectory(const std::wstring& sDirectory, _I
 
 bool WindowsFileSystem::DeleteFile(const std::wstring& sPath) const noexcept
 {
-    return static_cast<bool>(DeleteFileW(sPath.c_str()));
+    std::wstring sBuffer;
+    const auto& sAbsolutePath = MakeAbsolute(sBuffer, sPath);
+    return (DeleteFileW(sAbsolutePath.c_str()) != 0);
 }
 
 bool WindowsFileSystem::MoveFile(const std::wstring& sOldPath, const std::wstring& sNewPath) const noexcept
 {
-    return static_cast<bool>(MoveFileW(sOldPath.c_str(), sNewPath.c_str()));
+    std::wstring sBufferNew, sBufferOld;
+    const auto& sAbsolutePathNew = MakeAbsolute(sBufferNew, sNewPath);
+    const auto& sAbsolutePathOld = MakeAbsolute(sBufferOld, sOldPath);
+    return (MoveFileW(sAbsolutePathOld.c_str(), sAbsolutePathNew.c_str()) != 0);
 }
 
 int64_t WindowsFileSystem::GetFileSize(const std::wstring& sPath) const
 {
+    std::wstring sBuffer;
+    const auto& sAbsolutePath = MakeAbsolute(sBuffer, sPath);
+
     WIN32_FILE_ATTRIBUTE_DATA fadFile;
-    if (!GetFileAttributesExW(sPath.c_str(), GET_FILEEX_INFO_LEVELS::GetFileExInfoStandard, &fadFile))
+    if (!GetFileAttributesExW(sAbsolutePath.c_str(), GET_FILEEX_INFO_LEVELS::GetFileExInfoStandard, &fadFile))
     {
         if (GetLastError() != ERROR_FILE_NOT_FOUND && ra::services::ServiceLocator::Exists<ra::services::ILogger>())
         {
@@ -91,14 +116,17 @@ int64_t WindowsFileSystem::GetFileSize(const std::wstring& sPath) const
         return -1;
     }
 
-    const LARGE_INTEGER nSize{ fadFile.nFileSizeLow, ra::narrow_cast<LONG>(fadFile.nFileSizeHigh) };
+    const LARGE_INTEGER nSize{fadFile.nFileSizeLow, ra::to_signed(fadFile.nFileSizeHigh)};
     return nSize.QuadPart;
 }
 
 std::chrono::system_clock::time_point WindowsFileSystem::GetLastModified(const std::wstring& sPath) const
 {
+    std::wstring sBuffer;
+    const auto& sAbsolutePath = MakeAbsolute(sBuffer, sPath);
+
     WIN32_FILE_ATTRIBUTE_DATA fadFile;
-    if (!GetFileAttributesExW(sPath.c_str(), GET_FILEEX_INFO_LEVELS::GetFileExInfoStandard, &fadFile))
+    if (!GetFileAttributesExW(sAbsolutePath.c_str(), GET_FILEEX_INFO_LEVELS::GetFileExInfoStandard, &fadFile))
     {
         RA_LOG_ERR("Error %d getting last modified for file: %s", GetLastError(), ra::Narrow(sPath).c_str());
         return std::chrono::system_clock::time_point();
@@ -108,14 +136,17 @@ std::chrono::system_clock::time_point WindowsFileSystem::GetLastModified(const s
     // Jan 1 1970. Convert from 100-nanosecond intervals to 1-second intervals, then subtract the number of seconds
     // between the two dates. See https://www.gamedev.net/forums/topic/565693-converting-filetime-to-time_t-on-windows/
     const ULARGE_INTEGER nFileTime{ fadFile.ftLastWriteTime.dwLowDateTime, fadFile.ftLastWriteTime.dwHighDateTime };
-    const time_t tFileTime = static_cast<time_t>((nFileTime.QuadPart / 10000000ULL) - 11644473600ULL);
+    const time_t tFileTime{ra::to_signed((nFileTime.QuadPart / 10000000ULL) - 11644473600ULL)};
 
     return std::chrono::system_clock::from_time_t(tFileTime);
 }
 
 std::unique_ptr<TextReader> WindowsFileSystem::OpenTextFile(const std::wstring& sPath) const
 {
-    auto pReader = std::make_unique<FileTextReader>(sPath);
+    std::wstring sBuffer;
+    const auto& sAbsolutePath = MakeAbsolute(sBuffer, sPath);
+
+    auto pReader = std::make_unique<FileTextReader>(sAbsolutePath);
     if (!pReader->GetFStream().is_open())
     {
         RA_LOG("Failed to open \"%s\": %d", ra::Narrow(sPath).c_str(), errno);
@@ -127,7 +158,10 @@ std::unique_ptr<TextReader> WindowsFileSystem::OpenTextFile(const std::wstring& 
 
 std::unique_ptr<TextWriter> WindowsFileSystem::CreateTextFile(const std::wstring& sPath) const
 {
-    auto pWriter = std::make_unique<FileTextWriter>(sPath);
+    std::wstring sBuffer;
+    const auto& sAbsolutePath = MakeAbsolute(sBuffer, sPath);
+
+    auto pWriter = std::make_unique<FileTextWriter>(sAbsolutePath);
     if (!pWriter->GetFStream().is_open())
     {
         RA_LOG("Failed to create \"%s\": %d", ra::Narrow(sPath).c_str(), errno);
@@ -139,9 +173,12 @@ std::unique_ptr<TextWriter> WindowsFileSystem::CreateTextFile(const std::wstring
 
 std::unique_ptr<TextWriter> WindowsFileSystem::AppendTextFile(const std::wstring& sPath) const
 {
+    std::wstring sBuffer;
+    const auto& sAbsolutePath = MakeAbsolute(sBuffer, sPath);
+
     // cannot use std::ios::app, or the SetPosition method doesn't work
     // have to specify std::ios::in or the previous contents are lost
-    auto pWriter = std::make_unique<FileTextWriter>(sPath, std::ios::ate | std::ios::in | std::ios::out);
+    auto pWriter = std::make_unique<FileTextWriter>(sAbsolutePath, std::ios::ate | std::ios::in | std::ios::out);
     const gsl::not_null<const std::ofstream*> oStream{gsl::make_not_null(&pWriter->GetFStream())};
     if (!oStream->is_open())
     {

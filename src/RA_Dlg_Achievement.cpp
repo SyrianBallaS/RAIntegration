@@ -10,6 +10,10 @@
 
 #include "data\GameContext.hh"
 
+#include "services\AchievementRuntime.hh"
+
+#include "ui\viewmodels\MessageBoxViewModel.hh"
+
 inline constexpr std::array<LPCTSTR, 6> COLUMN_TITLES_CORE{_T("ID"),     _T("Title"),     _T("Points"),
                                                            _T("Author"), _T("Achieved?"), _T("Modified?")};
 inline constexpr std::array<LPCTSTR, 6> COLUMN_TITLES_UNOFFICIAL{_T("ID"),     _T("Title"),  _T("Points"),
@@ -18,7 +22,7 @@ inline constexpr std::array<LPCTSTR, 6> COLUMN_TITLES_LOCAL{_T("ID"),     _T("Ti
                                                             _T("Author"), _T("Active"), _T("Votes")};
 
 inline constexpr std::array<int, 6> COLUMN_SIZE{45, 200, 45, 80, 65, 65};
-inline constexpr auto NUM_COLS = ra::narrow_cast<int>(ra::to_signed(COLUMN_SIZE.size()));
+inline constexpr auto NUM_COLS = ra::to_signed(COLUMN_SIZE.size());
 
 auto iSelect = -1;
 
@@ -64,7 +68,10 @@ void Dlg_Achievements::SetupColumns(HWND hList)
 
 LRESULT ProcessCustomDraw(LPARAM lParam)
 {
-    LPNMLVCUSTOMDRAW lplvcd = reinterpret_cast<LPNMLVCUSTOMDRAW>(lParam);
+#pragma warning(push)
+#pragma warning(disable: 26490)
+    GSL_SUPPRESS_TYPE1 LPNMLVCUSTOMDRAW lplvcd = reinterpret_cast<LPNMLVCUSTOMDRAW>(lParam);
+#pragma warning(pop)
     switch (lplvcd->nmcd.dwDrawStage)
     {
         case CDDS_PREPAINT:
@@ -74,9 +81,9 @@ LRESULT ProcessCustomDraw(LPARAM lParam)
 
         case CDDS_ITEMPREPAINT: // Before an item is drawn
         {
-            const int nNextItem = static_cast<int>(lplvcd->nmcd.dwItemSpec);
+            const auto nNextItem = ra::to_signed(lplvcd->nmcd.dwItemSpec);
 
-            if (static_cast<size_t>(nNextItem) < g_pActiveAchievements->NumAchievements())
+            if (ra::to_unsigned(nNextItem) < g_pActiveAchievements->NumAchievements())
             {
                 // if (((int)lplvcd->nmcd.dwItemSpec%2)==0)
                 const BOOL bSelected =
@@ -146,7 +153,7 @@ size_t Dlg_Achievements::AddAchievement(HWND hList, const Achievement& Ach)
 
     LV_ITEM item{};
     item.mask = ra::to_unsigned(LVIF_TEXT);
-    item.iItem = ra::narrow_cast<int>(ra::to_signed(m_lbxData.size()));
+    item.iItem = ra::to_signed(m_lbxData.size());
     item.cchTextMax = 256;
 
     for (item.iSubItem = 0; item.iSubItem < NUM_COLS; ++item.iSubItem)
@@ -225,26 +232,6 @@ LocalValidateAchievementsBeforeCommit(_In_reads_(1) const std::array<int, 1> nLb
             MessageBox(nullptr, NativeStr(buffer).c_str(), TEXT("Error!"), MB_OK);
             return FALSE;
         }
-
-        constexpr std::array<char, 2> sIllegalChars{'&', ':'};
-        for (auto& cNextChar : sIllegalChars)
-        {
-            if (Ach.Title().find_first_of(cNextChar) != std::string::npos)
-            {
-                const auto str = ra::StringPrintf(
-                    "Achievement title contains an illegal character: %c\nPlease remove and try again", cNextChar);
-                MessageBox(nullptr, NativeStr(str).c_str(), TEXT("Error!"), MB_OK | MB_ICONERROR);
-                return FALSE;
-            }
-            if (Ach.Description().find_first_of(cNextChar) != std::string::npos)
-            {
-                const auto str = ra::StringPrintf(
-                    "Achievement description contains an illegal character: %c\nPlease remove and try again",
-                    cNextChar);
-                MessageBox(nullptr, NativeStr(str).c_str(), TEXT("Error!"), MB_OK);
-                return FALSE;
-            }
-        }
     }
 
     return TRUE;
@@ -262,6 +249,8 @@ BOOL AttemptUploadAchievementBlocking(const Achievement& Ach, unsigned int nFlag
     const auto& pGameContext = ra::services::ServiceLocator::Get<ra::data::GameContext>();
     const std::string sMem = Ach.CreateMemString();
 
+    const unsigned int nId = Ach.Category() == ra::etoi(AchievementSet::Type::Local) ? 0 : Ach.ID();
+
     //  Deal with secret:
     const auto sPostCode = ra::StringPrintf("%sSECRET%zuSEC%s%uRE2%u", RAUsers::LocalUser().Username(), Ach.ID(), sMem,
                                             Ach.Points(), Ach.Points() * 3);
@@ -271,7 +260,7 @@ BOOL AttemptUploadAchievementBlocking(const Achievement& Ach, unsigned int nFlag
     PostArgs args;
     args['u'] = RAUsers::LocalUser().Username();
     args['t'] = RAUsers::LocalUser().Token();
-    args['a'] = std::to_string(Ach.ID());
+    args['a'] = std::to_string(nId);
     args['g'] = std::to_string(pGameContext.GameId());
     args['n'] = Ach.Title();
     args['d'] = Ach.Description();
@@ -337,7 +326,8 @@ _Use_decl_annotations_ void Dlg_Achievements::OnClickAchievementSet(AchievementS
     SetDlgItemText(m_hAchievementsDlg, IDC_RA_POINT_TOTAL,
                    NativeStr(std::to_string(g_pActiveAchievements->PointTotal())).c_str());
 
-    CheckDlgButton(m_hAchievementsDlg, IDC_RA_CHKACHPROCESSINGACTIVE, g_pActiveAchievements->ProcessingActive());
+    const auto& pRuntime = ra::services::ServiceLocator::Get<ra::services::AchievementRuntime>();
+    CheckDlgButton(m_hAchievementsDlg, IDC_RA_CHKACHPROCESSINGACTIVE, !pRuntime.IsPaused());
 
     const auto& pGameContext = ra::services::ServiceLocator::Get<ra::data::GameContext>();
     OnLoad_NewRom(pGameContext.GameId()); // assert: calls UpdateSelectedAchievementButtons
@@ -377,7 +367,8 @@ INT_PTR Dlg_Achievements::AchievementsProc(HWND hDlg, UINT nMsg, WPARAM wParam, 
             const auto& pGameContext = ra::services::ServiceLocator::Get<ra::data::GameContext>();
             OnLoad_NewRom(pGameContext.GameId());
 
-            CheckDlgButton(hDlg, IDC_RA_CHKACHPROCESSINGACTIVE, g_pActiveAchievements->ProcessingActive());
+            const auto& pRuntime = ra::services::ServiceLocator::Get<ra::services::AchievementRuntime>();
+            CheckDlgButton(hDlg, IDC_RA_CHKACHPROCESSINGACTIVE, !pRuntime.IsPaused());
 
             //  Click the core
             OnClickAchievementSet(AchievementSet::Type::Core);
@@ -661,17 +652,20 @@ INT_PTR Dlg_Achievements::AchievementsProc(HWND hDlg, UINT nMsg, WPARAM wParam, 
                     }
                 }
                 break;
+
                 case IDC_RA_COMMIT_ACH:
                 {
                     if (!RA_GameIsActive())
                         break;
 
-                    if (g_nActiveAchievementSet == AchievementSet::Type::Local)
+                    const auto& pGameContext = ra::services::ServiceLocator::Get<ra::data::GameContext>();
+                    if (pGameContext.ActiveAchievementType() == AchievementSet::Type::Local)
                     {
                         // Local save is to disk
-                        if (g_pActiveAchievements->SaveToFile())
+                        if (pGameContext.SaveLocal())
                         {
-                            MessageBox(hDlg, TEXT("Saved OK!"), TEXT("OK"), MB_OK);
+                            ra::ui::viewmodels::MessageBoxViewModel::ShowMessage(L"Saved OK!");
+
                             for (unsigned int i = 0; i < g_pActiveAchievements->NumAchievements(); i++)
                                 g_pActiveAchievements->GetAchievement(i).SetModified(FALSE);
 
@@ -679,17 +673,17 @@ INT_PTR Dlg_Achievements::AchievementsProc(HWND hDlg, UINT nMsg, WPARAM wParam, 
                         }
                         else
                         {
-                            MessageBox(hDlg, TEXT("Error during save!"), TEXT("Error"), MB_OK | MB_ICONWARNING);
+                            ra::ui::viewmodels::MessageBoxViewModel::ShowErrorMessage(L"Error during save!");
                         }
-
-                        return TRUE;
                     }
                     else
                     {
                         CommitAchievements(hDlg);
                     }
+
+                    return TRUE;
                 }
-                break;
+
                 case IDC_RA_REVERTSELECTED:
                 {
                     if (!RA_GameIsActive())
@@ -735,8 +729,11 @@ INT_PTR Dlg_Achievements::AchievementsProc(HWND hDlg, UINT nMsg, WPARAM wParam, 
                 break;
 
                 case IDC_RA_CHKACHPROCESSINGACTIVE:
-                    g_pActiveAchievements->SetPaused(IsDlgButtonChecked(hDlg, IDC_RA_CHKACHPROCESSINGACTIVE) == FALSE);
+                {
+                    auto& pRuntime = ra::services::ServiceLocator::GetMutable<ra::services::AchievementRuntime>();
+                    pRuntime.SetPaused(IsDlgButtonChecked(hDlg, IDC_RA_CHKACHPROCESSINGACTIVE) == FALSE);
                     return TRUE;
+                }
 
                 case IDC_RA_RESET_ACH:
                 {
@@ -834,13 +831,17 @@ INT_PTR Dlg_Achievements::AchievementsProc(HWND hDlg, UINT nMsg, WPARAM wParam, 
 
         case WM_NOTIFY:
         {
-            switch ((reinterpret_cast<LPNMHDR>(lParam)->code))
+#pragma warning(push)
+#pragma warning(disable: 26490)
+            GSL_SUPPRESS_TYPE1
+            switch (reinterpret_cast<LPNMHDR>(lParam)->code)
             {
                 case LVN_ITEMCHANGED: //!?? LVN on a LPNMHDR?
                 {
                     iSelect = -1;
                     // MessageBox( nullptr, "Item changed!", "TEST", MB_OK );
-                    LPNMLISTVIEW pLVInfo = (LPNMLISTVIEW)lParam;
+                    GSL_SUPPRESS_TYPE1 LPNMLISTVIEW pLVInfo = reinterpret_cast<LPNMLISTVIEW>(lParam);
+#pragma warning(pop)
                     if (pLVInfo->iItem != -1)
                     {
                         iSelect = pLVInfo->iItem;
@@ -861,17 +862,21 @@ INT_PTR Dlg_Achievements::AchievementsProc(HWND hDlg, UINT nMsg, WPARAM wParam, 
                 break;
 
                 case NM_DBLCLK:
+#pragma warning(push)
+#pragma warning(disable: 26490)
+                    GSL_SUPPRESS_TYPE1
                     if (reinterpret_cast<LPNMITEMACTIVATE>(lParam)->iItem != -1)
                     {
                         SendMessage(g_RAMainWnd, WM_COMMAND, IDM_RA_FILES_ACHIEVEMENTEDITOR, 0);
-                        g_AchievementEditorDialog.LoadAchievement(
+                        GSL_SUPPRESS_TYPE1 g_AchievementEditorDialog.LoadAchievement(
                             &g_pActiveAchievements->GetAchievement(reinterpret_cast<LPNMITEMACTIVATE>(lParam)->iItem),
                             FALSE);
+#pragma warning(pop)
                     }
                     return FALSE; //? TBD ##SD
 
                 case NM_CUSTOMDRAW:
-                    SetWindowLong(hDlg, DWL_MSGRESULT, static_cast<LONG>(ProcessCustomDraw(lParam)));
+                    SetWindowLongPtr(hDlg, DWLP_MSGRESULT, ProcessCustomDraw(lParam));
                     return TRUE;
             }
 
@@ -1105,18 +1110,6 @@ void Dlg_Achievements::OnLoad_NewRom(unsigned int nGameID)
     UpdateSelectedAchievementButtons(nullptr);
 }
 
-void Dlg_Achievements::OnGet_Achievement(const Achievement& ach)
-{
-    const size_t nIndex = g_pActiveAchievements->GetAchievementIndex(ach);
-
-    if (g_nActiveAchievementSet == AchievementSet::Type::Core)
-        OnEditData(nIndex, Column::Achieved, "Yes");
-    else
-        OnEditData(nIndex, Column::Active, "No");
-
-    UpdateSelectedAchievementButtons(&ach);
-}
-
 void Dlg_Achievements::OnEditAchievement(const Achievement& ach)
 {
     const size_t nIndex = g_pActiveAchievements->GetAchievementIndex(ach);
@@ -1175,9 +1168,9 @@ void Dlg_Achievements::OnEditData(size_t nItem, Column nColumn, const std::strin
     {
         ra::tstring sStr{NativeStr(LbxDataAt(nItem, nColumn))}; // scoped cache
         LV_ITEM item{};
-        item.mask = ra::to_unsigned(LVIF_TEXT);
+        item.mask = UINT{LVIF_TEXT};
         item.iItem = nItem;
-        item.iSubItem = ra::narrow_cast<int>(ra::to_signed(ra::etoi(nColumn)));
+        item.iSubItem = ra::to_signed(ra::etoi(nColumn));
         item.pszText = sStr.data();
         item.cchTextMax = 256;
 

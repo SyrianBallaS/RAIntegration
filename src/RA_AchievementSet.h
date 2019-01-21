@@ -20,9 +20,6 @@ public:
 
     void Clear() noexcept;
     void Test();
-    void Reset() noexcept;
-
-    bool SaveToFile() const;
 
     //	Get Achievement at offset
     Achievement& GetAchievement(size_t nIter)
@@ -56,16 +53,13 @@ public:
     //	Find index of the given achievement in the array list (useful for LBX lookups)
     size_t GetAchievementIndex(const Achievement& Ach);
 
-    void AddAchievement(const Achievement* pAchievement)
+    void AddAchievement(Achievement* const pAchievement)
     {
         Expects(pAchievement != nullptr);
-        m_Achievements.push_back(const_cast<Achievement*>(pAchievement));
+        m_Achievements.push_back(pAchievement);
     }
 
     bool RemoveAchievement(const Achievement* pAchievement);
-
-    bool ProcessingActive() const noexcept { return m_bProcessingActive; }
-    void SetPaused(BOOL bIsPaused) noexcept { m_bProcessingActive = !bIsPaused; }
 
     bool HasUnsavedChanges() const noexcept;
 
@@ -78,7 +72,6 @@ public:
 private:
     // pointers to items in GameContext.m_vAchievements
     std::vector<Achievement*> m_Achievements;
-    bool m_bProcessingActive{ TRUE };
 };
 
 //	Externals:

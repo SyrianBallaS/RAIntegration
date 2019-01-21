@@ -36,6 +36,11 @@ public:
     const std::wstring& GameTitle() const noexcept { return m_sGameTitle; }
 
     /// <summary>
+    /// Sets the game title.
+    /// </summary>
+    void SetGameTitle(const std::wstring& sGameTitle) { m_sGameTitle = sGameTitle; }
+
+    /// <summary>
     /// Gets the hash of the currently loaded game.
     /// </summary>
     const std::string& GameHash() const noexcept { return m_sGameHash; }
@@ -90,6 +95,16 @@ public:
     Achievement& NewAchievement(AchievementSet::Type nType);
 
     /// <summary>
+    /// Shows the popup for earning an achievement and notifies the server if legitimate.
+    /// </summary>
+    void AwardAchievement(unsigned int nAchievementId) const;
+
+    /// <summary>
+    /// Updates the set of unlocked achievements from the server.
+    /// </summary>
+    void RefreshUnlocks() { RefreshUnlocks(false); }
+
+    /// <summary>
     /// Gets whether or not the loaded game has a rich presence script.
     /// </summary>
     virtual bool HasRichPresence() const noexcept;
@@ -116,9 +131,15 @@ public:
     /// <remarks>Destroys the achievement if it does not exist in local storage</remarks>
     bool ReloadAchievement(unsigned int nAchievementId);
 
+    /// <summary>
+    /// Saves local achievement data to local storage.
+    /// </summary>
+    bool SaveLocal() const;
+
 protected:
     void MergeLocalAchievements();
     bool ReloadAchievement(Achievement& pAchievement);
+    void RefreshUnlocks(bool bWasPaused);
 
     unsigned int m_nGameId = 0;
     std::wstring m_sGameTitle;

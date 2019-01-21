@@ -19,6 +19,8 @@
 #include "services\IThreadPool.hh"
 #include "services\ServiceLocator.hh"
 
+#include <winhttp.h>
+
 const char* RequestTypeToString[] =
 {
     "RequestScore",
@@ -33,7 +35,6 @@ const char* RequestTypeToString[] =
     "RequestGamesList",
     "RequestAllProgress",
 
-    "RequestSubmitAwardAchievement",
     "RequestSubmitCodeNote",
     "RequestSubmitLeaderboardEntry",
     "RequestSubmitAchievementData",
@@ -56,7 +57,6 @@ const char* RequestTypeToPost[] =
     "gameslist",
     "allprogress",
 
-    "awardachievement",
     "submitcodenote",
     "submitlbentry",
     "uploadachievement",
@@ -123,9 +123,11 @@ static void AppendNTVersion(_Inout_ std::string& sUserAgent)
     {
         RTL_OSVERSIONINFOEXW osVersion{ sizeof(RTL_OSVERSIONINFOEXW) };
         using fnRtlGetVersion = NTSTATUS(NTAPI*)(PRTL_OSVERSIONINFOEXW);
-        const auto RtlGetVersion{
-            reinterpret_cast<fnRtlGetVersion>(::GetProcAddress(ntModule, "RtlGetVersion"))
-        };
+
+        fnRtlGetVersion RtlGetVersion{};
+        GSL_SUPPRESS_TYPE1 RtlGetVersion =
+            reinterpret_cast<fnRtlGetVersion>(::GetProcAddress(ntModule, "RtlGetVersion"));
+
         if (RtlGetVersion)
         {
             RtlGetVersion(&osVersion);
@@ -275,7 +277,8 @@ BOOL DoBlockingImageUpload(UploadType nType, const std::string& sFilename, std::
         const char* mimeBoundary = "---------------------------41184676334";
         const wchar_t* contentType = L"Content-Type: multipart/form-data; boundary=---------------------------41184676334\r\n";
 
-        const int nResult = WinHttpAddRequestHeaders(hRequest, contentType, (unsigned long)-1, WINHTTP_ADDREQ_FLAG_ADD_IF_NEW);
+        const int nResult =
+            WinHttpAddRequestHeaders(hRequest, contentType, ra::to_unsigned(-1), WINHTTP_ADDREQ_FLAG_ADD_IF_NEW);
         if (nResult != 0)
         {
             // Add the photo to the stream

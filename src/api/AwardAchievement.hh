@@ -1,5 +1,5 @@
-#ifndef RA_API_LOGIN_HH
-#define RA_API_LOGIN_HH
+#ifndef RA_API_AWARD_ACHIEVEMENT_HH
+#define RA_API_AWARD_ACHIEVEMENT_HH
 #pragma once
 
 #include "ApiCall.hh"
@@ -7,24 +7,21 @@
 namespace ra {
 namespace api {
 
-class Login
+class AwardAchievement
 {
 public:
-    static constexpr const char* const Name() noexcept { return "Login"; }
+    static constexpr const char* const Name() noexcept { return "AwardAchievement"; }
 
     struct Response : ApiResponseBase
     {
-        std::string Username;
-        std::string ApiToken;
-        unsigned int Score{ 0U };
-        unsigned int NumUnreadMessages{ 0U };
+        unsigned int NewPlayerScore{ 0U };
     };
 
     struct Request : ApiRequestBase
     {
-        std::string Username;
-        std::string Password;
-        std::string ApiToken;
+        unsigned int AchievementId{ 0U };
+        bool Hardcore{ false };
+        std::string GameHash;
 
         using Callback = std::function<void(const Response& response)>;
 
@@ -45,4 +42,4 @@ public:
 } // namespace api
 } // namespace ra
 
-#endif // !RA_API_LOGIN_HH
+#endif // !RA_API_AWARD_ACHIEVEMENT_HH

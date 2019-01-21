@@ -219,52 +219,32 @@ public:
     template<typename T>
     void Append(const T& arg)
     {
-        PendingString pPending;
         if (m_bPrepareWide)
-        {
-            pPending.WString = ra::ToWString(arg);
-            pPending.DataType = PendingString::Type::WString;
-        }
+            m_vPending.emplace_back(std::wstring{ra::ToWString(arg)});
         else
-        {
-            pPending.String = ra::ToString(arg);
-            pPending.DataType = PendingString::Type::String;
-        }
-        m_vPending.emplace_back(std::move(pPending));
+            m_vPending.emplace_back(std::string{ra::ToString(arg)});
     }
 
     template<>
     void Append(const std::string& arg)
     {
-        PendingString pPending;
-        pPending.Ref.String = &arg;
-        pPending.DataType = PendingString::Type::StringRef;
-        m_vPending.emplace_back(std::move(pPending));
+        m_vPending.emplace_back(arg.c_str(), arg.length());
     }
 
     template<>
     void Append(const std::wstring& arg)
     {
-        PendingString pPending;
-        pPending.Ref.WString = &arg;
-        pPending.DataType = PendingString::Type::WStringRef;
-        m_vPending.emplace_back(std::move(pPending));
+        m_vPending.emplace_back(arg.c_str(), arg.length());
     }
 
     void Append(std::string&& arg)
     {
-        PendingString pPending;
-        pPending.String = std::move(arg);
-        pPending.DataType = PendingString::Type::String;
-        m_vPending.emplace_back(std::move(pPending));
+        m_vPending.emplace_back(std::move(arg));
     }
 
     void Append(std::wstring&& arg)
     {
-        PendingString pPending;
-        pPending.WString = std::move(arg);
-        pPending.DataType = PendingString::Type::WString;
-        m_vPending.emplace_back(std::move(pPending));
+        m_vPending.emplace_back(std::move(arg));
     }
 
     template<>
@@ -284,11 +264,7 @@ public:
         if (nLength == 0)
             return;
 
-        PendingString pPending;
-        pPending.Ref.Char.Pointer = pStart;
-        pPending.Ref.Char.Length = nLength;
-        pPending.DataType = PendingString::Type::CharRef;
-        m_vPending.emplace_back(std::move(pPending));
+        m_vPending.emplace_back(pStart, nLength);
     }
 
     void AppendSubString(const wchar_t* pStart, size_t nLength)
@@ -296,11 +272,7 @@ public:
         if (nLength == 0)
             return;
 
-        PendingString pPending;
-        pPending.Ref.WChar.Pointer = pStart;
-        pPending.Ref.WChar.Length = nLength;
-        pPending.DataType = PendingString::Type::WCharRef;
-        m_vPending.emplace_back(std::move(pPending));
+        m_vPending.emplace_back(pStart, nLength);
     }
 
     void Append() noexcept
@@ -369,10 +341,7 @@ public:
             assert(!"Unsupported formatted type");
         }
 
-        PendingString pPending;
-        pPending.String = oss.str();
-        pPending.DataType = PendingString::Type::String;
-        m_vPending.emplace_back(std::move(pPending));
+        m_vPending.emplace_back(oss.str());
     }
 
     void AppendFormat(const char* arg, const std::string& sFormat)
@@ -396,12 +365,7 @@ public:
             int nPadding = std::stoi(sFormat.c_str());
             nPadding -= nLength;
             if (nPadding > 0)
-            {
-                PendingString pPending;
-                pPending.String = std::string(nPadding, ' ');
-                pPending.DataType = PendingString::Type::String;
-                m_vPending.emplace_back(std::move(pPending));
-            }
+                m_vPending.emplace_back(std::string(nPadding, ' '));
 
             AppendSubString(arg, nLength);
         }
@@ -545,24 +509,33 @@ private:
 
     bool m_bPrepareWide;
 
-    struct PendingString
+    class PendingString
     {
-        union {
-            const std::string* String;
-            const std::wstring* WString;
+    public:
+        explicit PendingString(std::string&& arg) noexcept : String{std::move(arg)}, DataType{Type::String} {}
+        explicit PendingString(std::wstring&& arg) noexcept : WString{std::move(arg)}, DataType{Type::WString} {}
+        explicit PendingString(_In_z_ const char* const restrict ptr, std::size_t len) noexcept :
+            Ref{std::string_view{ptr, len}},
+            DataType{Type::CharRef}
+        {}
+        explicit PendingString(_In_z_ const wchar_t* const restrict ptr, std::size_t len) noexcept :
+            Ref{std::wstring_view{ptr, len}},
+            DataType{Type::WCharRef}
+        {}
+        PendingString() noexcept = delete;
+        ~PendingString() noexcept = default;
 
-            struct
-            {
-                const char* Pointer;
-                size_t Length;
-            } Char;
+        // To prevent copying moving
+        PendingString(const PendingString&) = delete;
+        PendingString& operator=(const PendingString&) = delete;
+        PendingString& operator=(PendingString&&) noexcept = delete;
+        
+        // This is needed by m_vPending's allocator
+        PendingString(PendingString&&) noexcept = default;
 
-            struct
-            {
-                const wchar_t* Pointer;
-                size_t Length;
-            } WChar;
-        } Ref{};
+    private:
+        using RefType = std::variant<std::string_view, std::wstring_view>;
+        RefType Ref;
 
         std::string String;
         std::wstring WString;
@@ -571,12 +544,12 @@ private:
         {
             String,
             WString,
-            StringRef,
-            WStringRef,
             CharRef,
             WCharRef,
         };
         Type DataType{ Type::String };
+
+        friend class StringBuilder;
     };
 
     mutable std::vector<PendingString> m_vPending;
@@ -651,17 +624,17 @@ public:
     /// <summary>
     /// Returns <c>true</c> if the entire string has been processed.
     /// </summary>
-    bool EndOfString() const noexcept { return m_nPosition >= m_sString.length(); }
+    _NODISCARD bool EndOfString() const noexcept { return m_nPosition >= m_sString.length(); }
 
     /// <summary>
     /// Returns the next character without advancing the position.
     /// </summary>
-    GSL_SUPPRESS_F6 char PeekChar() const noexcept { return m_nPosition < m_sString.length() ? m_sString.at(m_nPosition) : '\0'; }
+    GSL_SUPPRESS_F6 _NODISCARD char PeekChar() const noexcept { return m_nPosition < m_sString.length() ? m_sString.at(m_nPosition) : '\0'; }
 
     /// <summary>
     /// Get the current position of the cursor within the string.
     /// </summary>
-    size_t CurrentPosition() const noexcept { return m_nPosition; }
+    _NODISCARD size_t CurrentPosition() const noexcept { return m_nPosition; }
 
     /// <summary>
     /// Sets the cursor position.
@@ -701,7 +674,7 @@ public:
     /// Advances the cursor to the next occurrance of the specified charater, or the end of the string if no
     /// occurances are found and returns a string containing all of the characters advanced over.
     /// </summary>
-    std::string ReadTo(char cStop)
+    _NODISCARD std::string ReadTo(char cStop)
     {
         const size_t nStart = m_nPosition;
         AdvanceTo(cStop);
@@ -709,9 +682,14 @@ public:
     }
 
     /// <summary>
+    /// Reads from the current quote to the next unescaped quote, unescaping any other characters along the way.
+    /// </summary>
+    _NODISCARD std::string ReadQuotedString();
+
+    /// <summary>
     /// Advances the cursor over digits and returns the number they represent.
     /// </summary>
-    unsigned int ReadNumber()
+    _NODISCARD unsigned int ReadNumber()
     {
         if (EndOfString())
             return 0;
@@ -725,13 +703,27 @@ public:
     /// <summary>
     /// Returns the number represented by the next series of digits.
     /// </summary>
-    unsigned int PeekNumber()
+    _NODISCARD unsigned int PeekNumber()
     {
         if (EndOfString())
             return 0;
 
         char* pEnd;
         return strtoul(&m_sString.at(m_nPosition), &pEnd, 10);
+    }
+
+    /// <summary>
+    /// If the next character is the specified character, advance the cursor over it.
+    /// </summary>
+    /// <returns><c>true</c> if the next character matched and was skipped over, <c>false</c> if not.
+    bool Consume(char c)
+    {
+        if (EndOfString())
+            return false;
+        if (m_sString.at(m_nPosition) != c)
+            return false;
+        ++m_nPosition;
+        return true;
     }
 
     /// <summary>

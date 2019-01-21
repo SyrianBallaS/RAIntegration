@@ -233,74 +233,6 @@ void Achievement::ParseTrigger(const char* sTrigger)
     }
 }
 
-const char* Achievement::ParseLine(const char* restrict pBuffer)
-{
-    std::string sTemp;
-
-    if (pBuffer == nullptr || pBuffer[0] == '\0')
-        return pBuffer;
-
-    if (pBuffer[0] == '/' || pBuffer[0] == '\\')
-        return pBuffer;
-
-    // Read ID of achievement:
-    _ReadStringTil(sTemp, ':', pBuffer);
-    SetID(std::stoul(sTemp));
-
-    //	parse conditions
-    const char* pTrigger = pBuffer;
-    while (*pBuffer && (pBuffer[0] != ':' || strchr("ABCPRabcpr", pBuffer[-1]) != nullptr))
-        pBuffer++;
-    ParseTrigger(pTrigger);
-
-    // Skip any whitespace/colons
-    while (*pBuffer == ' ' || *pBuffer == ':')
-        pBuffer++;
-
-    SetActive(false);
-
-    //	buffer now contains TITLE : DESCRIPTION : PROGRESS(unused) : PROGRESS_MAX(unused) : PROGRESS_FMT(unused) :
-    //                      AUTHOR : POINTS : CREATED : MODIFIED : UPVOTES : DOWNVOTES : BADGEFILENAME
-
-    _ReadStringTil(sTemp, ':', pBuffer);
-    SetTitle(sTemp);
-
-    _ReadStringTil(sTemp, ':', pBuffer);
-    SetDescription(sTemp);
-
-    _ReadStringTil(sTemp, ':', pBuffer);
-    SetProgressIndicator(sTemp);
-
-    _ReadStringTil(sTemp, ':', pBuffer);
-    SetProgressIndicatorMax(sTemp);
-
-    _ReadStringTil(sTemp, ':', pBuffer);
-    SetProgressIndicatorFormat(sTemp);
-
-    _ReadStringTil(sTemp, ':', pBuffer);
-    SetAuthor(sTemp);
-
-    _ReadStringTil(sTemp, ':', pBuffer);
-    SetPoints(std::stoul(sTemp));
-
-    _ReadStringTil(sTemp, ':', pBuffer);
-    SetCreatedDate(std::stoll(sTemp));
-
-    _ReadStringTil(sTemp, ':', pBuffer);
-    SetModifiedDate(std::stoll(sTemp));
-
-    _ReadStringTil(sTemp, ':', pBuffer);
-    // SetUpvotes( (unsigned short)atol( sTemp.c_str() ) );
-
-    _ReadStringTil(sTemp, ':', pBuffer);
-    // SetDownvotes( (unsigned short)atol( sTemp.c_str() ) );
-
-    _ReadStringTil(sTemp, ':', pBuffer);
-    SetBadgeImage(sTemp);
-
-    return pBuffer;
-}
-
 static constexpr bool HasHitCounts(const rc_condset_t* pCondSet) noexcept
 {
     rc_condition_t* condition = pCondSet->conditions;
@@ -397,15 +329,15 @@ void Achievement::SetActive(BOOL bActive) noexcept
         m_bActive = bActive;
         SetDirtyFlag(DirtyFlags::All);
 
-        if (ra::services::ServiceLocator::Exists<ra::services::AchievementRuntime>())
+        if (m_pTrigger && ra::services::ServiceLocator::Exists<ra::services::AchievementRuntime>())
         {
             auto& pRuntime = ra::services::ServiceLocator::GetMutable<ra::services::AchievementRuntime>();
             if (!m_bActive)
                 pRuntime.DeactivateAchievement(ID());
             else if (m_bPauseOnReset)
-                pRuntime.MonitorAchievementReset(ID(), reinterpret_cast<rc_trigger_t*>(m_pTrigger));
+                pRuntime.MonitorAchievementReset(ID(), static_cast<rc_trigger_t*>(m_pTrigger));
             else
-                pRuntime.ActivateAchievement(ID(), reinterpret_cast<rc_trigger_t*>(m_pTrigger));
+                pRuntime.ActivateAchievement(ID(), static_cast<rc_trigger_t*>(m_pTrigger));
         }
     }
 }
@@ -420,9 +352,9 @@ void Achievement::SetPauseOnReset(BOOL bPause)
         {
             auto& pRuntime = ra::services::ServiceLocator::GetMutable<ra::services::AchievementRuntime>();
             if (m_bPauseOnReset)
-                pRuntime.MonitorAchievementReset(ID(), reinterpret_cast<rc_trigger_t*>(m_pTrigger));
+                pRuntime.MonitorAchievementReset(ID(), static_cast<rc_trigger_t*>(m_pTrigger));
             else
-                pRuntime.ActivateAchievement(ID(), reinterpret_cast<rc_trigger_t*>(m_pTrigger));
+                pRuntime.ActivateAchievement(ID(), static_cast<rc_trigger_t*>(m_pTrigger));
         }
     }
 }
