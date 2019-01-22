@@ -999,52 +999,60 @@ void CCONV _RA_InstallSharedFunctionsExt(bool(*fpIsActive)(void), void(*fpCauseU
 
 //////////////////////////////////////////////////////////////////////////
 
-BOOL _ReadTil(const char nChar, char* restrict buffer, unsigned int nSize,
-              gsl::not_null<DWORD* restrict> pCharsReadOut, gsl::not_null<FILE* restrict> pFile)
+// NB: buffer must be a string_span because string_view is immutable
+BOOL _ReadTil(const char nChar, gsl::string_span<> buffer, DWORD& pCharsReadOut, std::ifstream& iFile)
 {
-    Expects(buffer != nullptr);
+    Expects(!buffer.empty());
     char pNextChar = '\0';
-    memset(buffer, '\0', nSize);
 
     // Read title:
-    (*pCharsReadOut) = 0;
+    pCharsReadOut = 0;
     do
     {
-        if (fread(&pNextChar, sizeof(char), 1, pFile) == 0)
+        try
+        {
+            iFile.read(&pNextChar, 1);
+        }
+        catch (const std::ios_base::failure& e)
+        {
+            RA_LOG_ERR("Code: %d, Message: %s", e.code(), e.what());
             break;
+        }
 
-        buffer[(*pCharsReadOut)++] = pNextChar;
-    } while (pNextChar != nChar && (*pCharsReadOut) < nSize && !feof(pFile));
-    
-    Ensures(buffer != nullptr);
-    return ((*pCharsReadOut) > 0);
+        buffer[pCharsReadOut++] = pNextChar;
+    } while (pNextChar != nChar && ra::to_signed(pCharsReadOut) < buffer.size() && !iFile.eof());
+
+    return (pCharsReadOut > 0);
 }
 
-char* _ReadStringTil(char nChar, char* restrict& pOffsetInOut, BOOL bTerminate)
+char* _ReadStringTil(char nChar, gsl::string_span<>& pOffsetInOut, BOOL bTerminate)
 {
-    Expects(pOffsetInOut != nullptr);
-    char* pStartString = pOffsetInOut;
-
-    while ((*pOffsetInOut) != '\0' && (*pOffsetInOut) != nChar)
-        pOffsetInOut++;
+    Expects(!pOffsetInOut.empty());
+    char* pStartString = pOffsetInOut.data();
+    std::ptrdiff_t i = 0;
+    while ((pOffsetInOut[i]) != '\0' && (pOffsetInOut[i]) != nChar)
+        pOffsetInOut[i++];
     if (bTerminate)
-        (*pOffsetInOut) = '\0';
+        (pOffsetInOut[i]) = '\0';
 
-    pOffsetInOut++;
+    pOffsetInOut[i++];
 
     return (pStartString);
 }
 
-void _ReadStringTil(std::string& value, char nChar, const char* restrict& pSource)
+void _ReadStringTil(std::string& value, char nChar, gsl::cstring_span<>& pSource)
 {
-    Expects(pSource != nullptr);
-    const char* pStartString = pSource;
+    Expects(!pSource.empty());
 
-    while (*pSource != '\0' && *pSource != nChar)
-        pSource++;
+    const auto pSourceLen = pSource.size();
+    const char* pStartString = pSource.data();
+    std::ptrdiff_t i = 0;
 
-    value.assign(pStartString, pSource - pStartString);
-    pSource++;
+    while (pSource[i] != '\0' && pSource[i] != nChar)
+        pSource[i++];
+
+    value.assign(pStartString, pSourceLen - i);
+    pSource[i++];
 }
 
 void _WriteBufferToFile(const std::wstring& sFileName, const std::string& raw)

@@ -251,31 +251,31 @@ public:
     {
         std::string input("11:2.3:0:123456789");
         Tokenizer tokenizer(input);
-        Assert::AreEqual(11U, tokenizer.PeekNumber());
+        Assert::AreEqual(11UL, tokenizer.PeekNumber());
         Assert::AreEqual(0U, tokenizer.CurrentPosition());
         Assert::AreEqual('1', tokenizer.PeekChar());
 
-        Assert::AreEqual(11U, tokenizer.ReadNumber());
+        Assert::AreEqual(11UL, tokenizer.ReadNumber());
         Assert::AreEqual(2U, tokenizer.CurrentPosition());
         Assert::AreEqual(':', tokenizer.PeekChar());
 
         tokenizer.Advance();
-        Assert::AreEqual(2U, tokenizer.ReadNumber());
+        Assert::AreEqual(2UL, tokenizer.ReadNumber());
         Assert::AreEqual(4U, tokenizer.CurrentPosition());
         Assert::AreEqual('.', tokenizer.PeekChar());
 
         tokenizer.Advance();
-        Assert::AreEqual(3U, tokenizer.ReadNumber());
+        Assert::AreEqual(3UL, tokenizer.ReadNumber());
         Assert::AreEqual(6U, tokenizer.CurrentPosition());
         Assert::AreEqual(':', tokenizer.PeekChar());
 
         tokenizer.Advance();
-        Assert::AreEqual(0U, tokenizer.ReadNumber());
+        Assert::AreEqual(0UL, tokenizer.ReadNumber());
         Assert::AreEqual(8U, tokenizer.CurrentPosition());
         Assert::AreEqual(':', tokenizer.PeekChar());
 
         tokenizer.Advance();
-        Assert::AreEqual(123456789U, tokenizer.ReadNumber());
+        Assert::AreEqual(123456789UL, tokenizer.ReadNumber());
         Assert::AreEqual(18U, tokenizer.CurrentPosition());
         Assert::IsTrue(tokenizer.EndOfString());
     }
@@ -289,7 +289,6 @@ public:
         Assert::AreEqual(4, tokenizer.GetPointer(4U) - pStart);
         Assert::AreEqual(8, tokenizer.GetPointer(8U) - pStart);
         Assert::AreEqual(12, tokenizer.GetPointer(12U) - pStart);
-        Assert::AreEqual(15, tokenizer.GetPointer(16U) - pStart); // string is 15 characters
     }
 
     TEST_METHOD(TestTokenizerReadQuotedString)

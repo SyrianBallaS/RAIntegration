@@ -50,6 +50,10 @@ _NODISCARD inline const std::string ToString(_In_ const T& value)
     {
         return std::to_string(etoi(value));
     }
+    else if constexpr (std::is_same_v<T, std::error_code>)
+    {
+        return std::to_string(value.value());
+    }
     else
     {
         static_assert(false, "No ToString implementation for type");
@@ -119,6 +123,10 @@ _NODISCARD inline const std::wstring ToWString(_In_ const T& value)
     else if constexpr (std::is_enum_v<T>)
     {
         return std::to_wstring(etoi(value));
+    }
+    else if constexpr (std::is_same_v<T, std::error_code>)
+    {
+        return std::to_wstring(value.value());
     }
     else
     {
@@ -609,8 +617,8 @@ public:
     }
 
     /// <summary>
-    /// Advances the cursor to the next occurrence of the specified charater, or the end of the string if no
-    /// occurances are found.
+    /// Advances the cursor to the next occurrence of the specified character, or the end of the string if no
+    /// occurrences are found.
     /// </summary>
     void AdvanceTo(char cStop)
     {
@@ -619,15 +627,10 @@ public:
     }
 
     /// <summary>
-    /// Advances the cursor to the next occurrance of the specified charater, or the end of the string if no
-    /// occurances are found and returns a string containing all of the characters advanced over.
+    /// Advances the cursor to the next occurrence of the specified character, or the end of the string if no
+    /// occurrences are found and returns a string containing all of the characters advanced over.
     /// </summary>
-    _NODISCARD std::string ReadTo(char cStop)
-    {
-        const size_t nStart = m_nPosition;
-        AdvanceTo(cStop);
-        return std::string(m_sString, nStart, m_nPosition - nStart);
-    }
+    _NODISCARD std::string ReadTo(char cStop);
 
     /// <summary>
     /// Reads from the current quote to the next unescaped quote, unescaping any other characters along the way.
@@ -637,28 +640,12 @@ public:
     /// <summary>
     /// Advances the cursor over digits and returns the number they represent.
     /// </summary>
-    _NODISCARD unsigned int ReadNumber()
-    {
-        if (EndOfString())
-            return 0;
-
-        char* pEnd;
-        const auto nResult = strtoul(&m_sString.at(m_nPosition), &pEnd, 10);
-        m_nPosition = pEnd - m_sString.c_str();
-        return nResult;
-    }
+    _NODISCARD unsigned long ReadNumber();
 
     /// <summary>
     /// Returns the number represented by the next series of digits.
     /// </summary>
-    _NODISCARD unsigned int PeekNumber()
-    {
-        if (EndOfString())
-            return 0;
-
-        char* pEnd;
-        return strtoul(&m_sString.at(m_nPosition), &pEnd, 10);
-    }
+    _NODISCARD unsigned long PeekNumber() const;
 
     /// <summary>
     /// If the next character is the specified character, advance the cursor over it.
@@ -677,10 +664,10 @@ public:
     /// <summary>
     /// Gets the raw pointer to the specified offset within the string.
     /// </summary>
-    GSL_SUPPRESS_F6 const char* GetPointer(size_t nPosition) const noexcept
+    GSL_SUPPRESS_F6 const auto GetPointer(size_t nPosition) const noexcept
     {
         if (nPosition >= m_sString.length())
-            return &m_sString.back() + 1; // This seems dangerous
+            return std::add_pointer_t<const char>();
 
         return &m_sString.at(nPosition);
     }

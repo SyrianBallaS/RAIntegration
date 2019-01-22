@@ -17,16 +17,19 @@
 #else
 // duplicate of code in RA_Core, but RA_Core needs to be cleaned up before it can be pulled into the unit test build
 GSL_SUPPRESS_F23
-void _ReadStringTil(std::string& value, char nChar, const char* restrict& pSource)
+void _ReadStringTil(std::string& value, char nChar, gsl::cstring_span<>& pSource)
 {
-    Expects(pSource != nullptr);
-    const char* pStartString = pSource;
+    Expects(!pSource.empty());
 
-    while (*pSource != '\0' && *pSource != nChar)
-        pSource++;
+    const auto pSourceLen = pSource.size();
+    const char* pStartString = pSource.data();
+    std::ptrdiff_t i = 0;
 
-    value.assign(pStartString, pSource - pStartString);
-    pSource++;
+    while (pSource[i] != '\0' && pSource[i] != nChar)
+        pSource[i++];
+
+    value.assign(pStartString, pSourceLen - i);
+    pSource[i++];
 }
 #endif
 

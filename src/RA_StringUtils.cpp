@@ -184,6 +184,13 @@ void StringBuilder::AppendToWString(_Inout_ std::wstring& sResult) const
     }
 }
 
+std::string Tokenizer::ReadTo(char cStop)
+{
+    const size_t nStart = m_nPosition;
+    AdvanceTo(cStop);
+    return {m_sString, nStart, m_nPosition - nStart};
+}
+
 std::string Tokenizer::ReadQuotedString()
 {
     std::string sString;
@@ -220,6 +227,25 @@ std::string Tokenizer::ReadQuotedString()
     }
 
     return sString;
+}
+
+unsigned long Tokenizer::ReadNumber()
+{
+    if (EndOfString())
+        return 0UL;
+
+    std::size_t pos{};
+    const auto nResult = std::stoul(&m_sString.at(m_nPosition), &pos);
+    m_nPosition += pos;
+    return nResult;
+}
+
+unsigned long Tokenizer::PeekNumber() const
+{
+    if (EndOfString())
+        return 0UL;
+
+    return std::stoul(&m_sString.at(m_nPosition));
 }
 
 } /* namespace ra */
