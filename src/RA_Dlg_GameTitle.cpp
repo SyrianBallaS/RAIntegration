@@ -43,41 +43,34 @@ INT_PTR Dlg_GameTitle::GameTitleProc(HWND hDlg, UINT uMsg, WPARAM wParam, _UNUSE
             {
                 const rapidjson::Value& Data = doc["Response"];
 
-                //	For all data responses to this request, populate our m_aGameTitles map
+                // For all data responses to this request, populate our m_aGameTitles map
                 {
-                    rapidjson::Value::ConstMemberIterator iter = Data.MemberBegin();
-                    while (iter != Data.MemberEnd())
+                    const auto datatView = gsl::make_span(Data.MemberBegin(), Data.MemberEnd());
+                    for (auto iter = datatView.cbegin(); iter != datatView.cend(); ++iter)
                     {
                         if (iter->name.IsNull() || iter->value.IsNull())
                         {
-                            iter++;
+                            std::advance(iter, 1);
                             continue;
                         }
 
                         // Keys cannot be anything but strings
-                        const auto nGameID = std::strtoul(iter->name.GetString(), nullptr, 10); 
-                        const std::string& sTitle = iter->value.GetString();
-                        m_aGameTitles[sTitle] = nGameID;
-
-                        iter++;
+                        const auto nGameID = std::stoul(iter->name.GetString()); 
+                        const std::string sTitle{iter->value.GetString()};
+                        m_aGameTitles.insert_or_assign(sTitle, nGameID);
                     }
                 }
 
                 {
-                    std::map<std::string, unsigned int>::const_iterator iter = m_aGameTitles.begin();
-                    while (iter != m_aGameTitles.end())
+                    for (auto& title : m_aGameTitles)
                     {
-                        const std::string& sTitle = iter->first;
+                        const std::string& sTitle = title.first;
 
                         nSel = ComboBox_AddString(hKnownGamesCbo, NativeStr(sTitle).c_str());
 
-                        //	Attempt to find this game and select it by default: case insensitive comparison
-                        if (sGameTitleTidy.compare(sTitle) == 0)
-                        {
+                        // Attempt to find this game and select it by default: case insensitive comparison
+                        if (sGameTitleTidy == sTitle)
                             ComboBox_SetCurSel(hKnownGamesCbo, nSel);
-                        }
-
-                        iter++;
                     }
                 }
             }

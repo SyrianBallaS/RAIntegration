@@ -118,8 +118,16 @@ protected:
 
         unsigned char* GetBytes() noexcept { return (nSize > sizeof(m_vBytes)) ? m_pBytes : &m_vBytes[0]; }
         const unsigned char* GetBytes() const noexcept { return (nSize > sizeof(m_vBytes)) ? m_pBytes : &m_vBytes[0]; }
-        unsigned char GetByte(std::size_t nIndex) noexcept { return GetBytes()[nIndex]; }
-        unsigned char GetByte(std::size_t nIndex) const noexcept { return GetBytes()[nIndex]; }
+        unsigned char GetByte(std::size_t nIndex) noexcept
+        {
+            const auto view = gsl::make_span(GetBytes(), GetSize());
+            return view[nIndex];
+        }
+        unsigned char GetByte(std::size_t nIndex) const noexcept
+        {
+            const auto view = gsl::make_span(GetBytes(), GetSize());
+            return view[nIndex];
+        }
         unsigned int GetAddress() const noexcept { return nAddress; }
         unsigned int GetSize() const noexcept { return nSize; }
 

@@ -101,7 +101,8 @@ void ParseGameHashLibraryFromFile(std::map<std::string, unsigned int>& GameHashL
     if ((!doc.HasParseError() && doc.HasMember("Success")) && (doc["Success"].GetBool() && doc.HasMember("MD5List")))
     {
         const auto& List{doc["MD5List"]};
-        for (auto iter = List.MemberBegin(); iter != List.MemberEnd(); ++iter)
+        const auto listView = gsl::make_span(List.MemberBegin(), List.MemberEnd());
+        for (auto iter = listView.cbegin(); iter != listView.cend(); ++iter)
         {
             if (iter->name.IsNull() || iter->value.IsNull())
                 continue;
@@ -129,7 +130,8 @@ void ParseGameTitlesFromFile(std::map<unsigned int, std::string>& GameTitlesList
     if ((!doc.HasParseError() && doc.HasMember("Success")) && (doc["Success"].GetBool() && doc.HasMember("Response")))
     {
         const auto& List{doc["Response"]};
-        for (auto iter = List.MemberBegin(); iter != List.MemberEnd(); ++iter)
+        const auto listView = gsl::make_span(List.MemberBegin(), List.MemberEnd());
+        for (auto iter = listView.cbegin(); iter != listView.cend(); ++iter)
         {
             if (iter->name.IsNull() || iter->value.IsNull())
                 continue;
@@ -161,7 +163,8 @@ void ParseMyProgressFromFile(std::map<unsigned int, std::string>& GameProgressOu
         //{"ID":"7","NumAch":"14","Earned":"10","HCEarned":"0"},
 
         const auto& List = doc["Response"];
-        for (auto iter = List.MemberBegin(); iter != List.MemberBegin(); ++iter)
+        const auto listView = gsl::make_span(List.MemberBegin(), List.MemberEnd());
+        for (auto iter = listView.cbegin(); iter != listView.cend(); ++iter)
         {
             const auto nNumAchievements{iter->value["NumAch"].GetUint()};
             const auto nEarned{iter->value["Earned"].GetUint()};

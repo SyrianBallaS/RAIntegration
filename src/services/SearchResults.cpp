@@ -117,24 +117,29 @@ _NODISCARD inline static constexpr auto GetValue(_In_ const unsigned char* const
                                                  _In_ MemSize nSize) noexcept
 {
     Expects(pBuffer != nullptr);
+
+    auto vBuffer = gsl::make_span(pBuffer, std::numeric_limits<std::uint16_t>::max());
+    //if (vBuffer[0] == unsigned char{})
+    //    return 0U;
+
     auto ret{ 0U };
     switch (nSize)
     {
         case MemSize::EightBit:
-            ret = pBuffer[nOffset];
+            ret = vBuffer[nOffset];
             break;
         case MemSize::SixteenBit:
-            ret = pBuffer[nOffset] | (pBuffer[nOffset + 1U] << 8U);
+            ret = vBuffer[nOffset] | (vBuffer[nOffset + 1U] << 8U);
             break;
         case MemSize::ThirtyTwoBit:
-            ret = (pBuffer[nOffset] | (pBuffer[nOffset + 1] << 8U) |
-                (pBuffer[nOffset + 2] << 16U) | (pBuffer[nOffset + 3] << 24U));
+            ret = (vBuffer[nOffset] | (vBuffer[nOffset + 1] << 8U) |
+                (vBuffer[nOffset + 2] << 16U) | (vBuffer[nOffset + 3] << 24U));
             break;
         case MemSize::Nibble_Upper:
-            ret = pBuffer[nOffset] >> 4U;
+            ret = vBuffer[nOffset] >> 4U;
             break;
         case MemSize::Nibble_Lower:
-            ret = pBuffer[nOffset] & 0x0FU;
+            ret = vBuffer[nOffset] & 0x0FU;
     }
 
     return ret;
