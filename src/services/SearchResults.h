@@ -106,7 +106,7 @@ protected:
             }
             else
             {
-                std::memcpy(m_vBytes, other.m_vBytes, sizeof(m_vBytes));
+                m_vBytes = other.m_vBytes;
             }
         }
         MemBlock& operator=(MemBlock&&) noexcept = delete;
@@ -116,8 +116,8 @@ protected:
                 delete[] m_pBytes;
         }
 
-        unsigned char* GetBytes() noexcept { return (nSize > sizeof(m_vBytes)) ? m_pBytes : &m_vBytes[0]; }
-        const unsigned char* GetBytes() const noexcept { return (nSize > sizeof(m_vBytes)) ? m_pBytes : &m_vBytes[0]; }
+        unsigned char* GetBytes() noexcept { return (nSize > sizeof(m_vBytes)) ? m_pBytes : m_vBytes.data(); }
+        const unsigned char* GetBytes() const noexcept { return (nSize > sizeof(m_vBytes)) ? m_pBytes : m_vBytes.data(); }
         unsigned char GetByte(std::size_t nIndex) noexcept
         {
             const auto view = gsl::make_span(GetBytes(), GetSize());
@@ -134,7 +134,7 @@ protected:
     private:
         union // 8 bytes
         {
-            unsigned char m_vBytes[8]{};
+            std::array<unsigned char, 8> m_vBytes{};
             unsigned char* m_pBytes;
         };
 

@@ -112,29 +112,53 @@ _NODISCARD _CONSTANT_FN ComparisonString(_In_ ComparisonType nCompareType) noexc
 }
 
 _Success_(return)
-_NODISCARD inline static constexpr auto GetValue(_In_ const unsigned char* const restrict pBuffer,
-                                                 _In_ unsigned int nOffset,
-                                                 _In_ MemSize nSize) noexcept
+_NODISCARD inline static auto GetValue(_In_ const unsigned char* const restrict pBuffer,
+                                       _In_ unsigned int nOffset,
+                                       _In_ MemSize nSize) noexcept
 {
     Expects(pBuffer != nullptr);
 
-    auto vBuffer = gsl::make_span(pBuffer, std::numeric_limits<std::uint16_t>::max());
-    //if (vBuffer[0] == unsigned char{})
-    //    return 0U;
+    const auto bufferSize = std::char_traits<unsigned char>::length(pBuffer);
+    const auto vBuffer = gsl::make_span(pBuffer, bufferSize);
 
     auto ret{ 0U };
     switch (nSize)
     {
         case MemSize::EightBit:
-            ret = vBuffer[nOffset];
+        {
+            // TBD: seems to happen with large memory, could accessing an address outside the pointer lead to a
+            // segmentation fault?
+            if (bufferSize == 0)
+                GSL_SUPPRESS_BOUNDS1 ret = vBuffer.data()[nOffset];
+            else
+                ret = vBuffer[nOffset];
+        }
             break;
         case MemSize::SixteenBit:
-            ret = vBuffer[nOffset] | (vBuffer[nOffset + 1U] << 8U);
-            break;
+        {
+            // TBD: Not good but it keeps on failing with large memory, can't figure it out
+            if (bufferSize == 0)
+                GSL_SUPPRESS_BOUNDS1 ret = vBuffer.data()[nOffset] | (vBuffer.data()[nOffset + 1U] << 8U);
+            else
+                ret = vBuffer[nOffset] | (vBuffer[nOffset + 1U] << 8U);
+        }
+        break;
         case MemSize::ThirtyTwoBit:
-            ret = (vBuffer[nOffset] | (vBuffer[nOffset + 1] << 8U) |
-                (vBuffer[nOffset + 2] << 16U) | (vBuffer[nOffset + 3] << 24U));
-            break;
+        {
+            // Not failing unit test but could happen
+            if (bufferSize == 0)
+            {
+                GSL_SUPPRESS_BOUNDS1 ret =
+                    (vBuffer.data()[nOffset] | (vBuffer.data()[nOffset + 1] << 8U) |
+                     (vBuffer.data()[nOffset + 2] << 16U) | (vBuffer.data()[nOffset + 3] << 24U));
+            }
+            else
+            {
+                ret = (vBuffer[nOffset] | (vBuffer[nOffset + 1] << 8U) | (vBuffer[nOffset + 2] << 16U) |
+                       (vBuffer[nOffset + 3] << 24U));
+            }
+        }
+        break;
         case MemSize::Nibble_Upper:
             ret = vBuffer[nOffset] >> 4U;
             break;
@@ -182,7 +206,9 @@ void SearchResults::AddMatches(unsigned int nAddressBase, const unsigned char* r
 {
     const unsigned int nBlockSize = vMatches.back() - vMatches.front() + Padding(m_nSize) + 1;
     MemBlock& block = AddBlock(nAddressBase + vMatches.front(), nBlockSize);
-    memcpy(block.GetBytes(), pMemory + vMatches.front(), nBlockSize);
+    const auto a = gsl::make_span(pMemory, std::char_traits<unsigned char>::length(pMemory));
+    const auto b = a.subspan(vMatches.front());
+    std::memcpy(block.GetBytes(), b.data(), nBlockSize);
 
     for (auto nMatch : vMatches)
         m_vMatchingAddresses.push_back(nAddressBase + nMatch);
@@ -234,7 +260,9 @@ void SearchResults::AddMatchesNibbles(unsigned int nAddressBase, const unsigned 
 {
     const unsigned int nBlockSize = (vMatches.back() >> 1) - (vMatches.front() >> 1) + Padding(m_nSize) + 1;
     auto& block = AddBlock((nAddressBase + vMatches.front()) >> 1, nBlockSize);
-    memcpy(block.GetBytes(), pMemory + (vMatches.front() >> 1), nBlockSize);
+    const auto a = gsl::make_span(pMemory, std::char_traits<unsigned char>::length(pMemory));
+    const auto b = a.subspan(vMatches.front() >> 1);
+    std::memcpy(block.GetBytes(), b.data(), nBlockSize);
 
     for (auto nMatch : vMatches)
         m_vMatchingAddresses.push_back(nAddressBase + nMatch);
@@ -317,7 +345,8 @@ void SearchResults::Initialize(const SearchResults& srSource, ComparisonType nCo
                                                      [[maybe_unused]] const unsigned char* restrict)
             {
                 Expects(pMemory != nullptr);
-                return Compare(pMemory[nIndex], nTestValue, nCompareType);
+                const auto sMemory{gsl::make_span(pMemory, std::char_traits<unsigned char>::length(pMemory))};
+                return Compare(sMemory[nIndex], nTestValue, nCompareType);
             });
             break;
 
@@ -325,7 +354,8 @@ void SearchResults::Initialize(const SearchResults& srSource, ComparisonType nCo
             ProcessBlocks(srSource, [nTestValue, nCompareType](unsigned int nIndex, const unsigned char* restrict pMemory, [[maybe_unused]] const unsigned char* restrict)
             {
                 Expects(pMemory != nullptr);
-                const unsigned int nValue = pMemory[nIndex] | (pMemory[nIndex + 1] << 8);
+                const auto sMemory{gsl::make_span(pMemory, std::char_traits<unsigned char>::length(pMemory))};
+                const unsigned int nValue = sMemory[nIndex] | (sMemory[nIndex + 1] << 8);
                 return Compare(nValue, nTestValue, nCompareType);
             });
             break;
@@ -334,8 +364,9 @@ void SearchResults::Initialize(const SearchResults& srSource, ComparisonType nCo
             ProcessBlocks(srSource, [nTestValue, nCompareType](unsigned int nIndex, const unsigned char* restrict pMemory, [[maybe_unused]] const unsigned char* restrict)
             {
                 Expects(pMemory != nullptr);
-                const unsigned int nValue = pMemory[nIndex] | (pMemory[nIndex + 1] << 8) |
-                    (pMemory[nIndex + 2] << 16) | (pMemory[nIndex + 3] << 24);
+                const auto sMemory{gsl::make_span(pMemory, std::char_traits<unsigned char>::length(pMemory))};
+                const unsigned int nValue = sMemory[nIndex] | (sMemory[nIndex + 1] << 8) |
+                    (sMemory[nIndex + 2] << 16) | (sMemory[nIndex + 3] << 24);
                 return Compare(nValue, nTestValue, nCompareType);
             });
             break;
@@ -363,7 +394,9 @@ void SearchResults::Initialize(const SearchResults& srSource, ComparisonType nCo
                 ProcessBlocks(srSource, [](unsigned int nIndex, const unsigned char* restrict pMemory, const unsigned char* restrict pPrev)
                 {
                     Expects((pMemory != nullptr) && (pPrev != nullptr));
-                    return pMemory[nIndex] == pPrev[nIndex];
+                    const auto sMemory{gsl::make_span(pMemory, std::char_traits<unsigned char>::length(pMemory))};
+                    const auto sPrev{gsl::make_span(pPrev, std::char_traits<unsigned char>::length(pPrev))};
+                    return sMemory[nIndex] == sPrev[nIndex];
                 });
                 break;
 
@@ -371,7 +404,9 @@ void SearchResults::Initialize(const SearchResults& srSource, ComparisonType nCo
                 ProcessBlocks(srSource, [](unsigned int nIndex, const unsigned char* restrict pMemory, const unsigned char* restrict pPrev)
                 {
                     Expects((pMemory != nullptr) && (pPrev != nullptr));
-                    return pMemory[nIndex] != pPrev[nIndex];
+                    const auto sMemory{gsl::make_span(pMemory, std::char_traits<unsigned char>::length(pMemory))};
+                    const auto sPrev{gsl::make_span(pPrev, std::char_traits<unsigned char>::length(pPrev))};
+                    return sMemory[nIndex] != sPrev[nIndex];
                 });
                 break;
 
@@ -379,7 +414,9 @@ void SearchResults::Initialize(const SearchResults& srSource, ComparisonType nCo
                 ProcessBlocks(srSource, [nCompareType](unsigned int nIndex, const unsigned char* restrict pMemory, const unsigned char* restrict pPrev)
                 {
                     Expects((pMemory != nullptr) && (pPrev != nullptr));
-                    return Compare(pMemory[nIndex], pPrev[nIndex], nCompareType);
+                    const auto sMemory{gsl::make_span(pMemory, std::char_traits<unsigned char>::length(pMemory))};
+                    const auto sPrev{gsl::make_span(pPrev, std::char_traits<unsigned char>::length(pPrev))};
+                    return Compare(sMemory[nIndex], sPrev[nIndex], nCompareType);
                 });
                 break;
         }
