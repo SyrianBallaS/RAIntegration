@@ -478,7 +478,7 @@ void MemoryViewerControl::OnClick(POINT point)
     const int nAddressRowClicked = (nTopLeft + (line << 4));
 
     // Clamp:
-    if (nAddressRowClicked < 0 || nAddressRowClicked > ra::to_signed(g_MemManager.TotalBankSize()))
+    if (nAddressRowClicked < 0 || nAddressRowClicked >= ra::to_signed(g_MemManager.TotalBankSize()))
     {
         // ignore; clicked above limit
         return;
@@ -808,17 +808,10 @@ INT_PTR Dlg_Memory::MemoryProc(HWND hDlg, UINT nMsg, WPARAM wParam, LPARAM lPara
             SetWindowFont(GetDlgItem(hDlg, IDC_RA_MEMBITS), GetStockObject(SYSTEM_FIXED_FONT), TRUE);
             SetWindowFont(GetDlgItem(hDlg, IDC_RA_MEMBITS_TITLE), GetStockObject(SYSTEM_FIXED_FONT), TRUE);
 
-            //	8-bit by default:
-            CheckDlgButton(hDlg, IDC_RA_CBO_4BIT, BST_UNCHECKED);
-            CheckDlgButton(hDlg, IDC_RA_CBO_8BIT, BST_CHECKED);
-            CheckDlgButton(hDlg, IDC_RA_CBO_16BIT, BST_UNCHECKED);
-            CheckDlgButton(hDlg, IDC_RA_CBO_32BIT, BST_UNCHECKED);
-
             CheckDlgButton(hDlg, IDC_RA_MEMVIEW8BIT, BST_CHECKED);
             CheckDlgButton(hDlg, IDC_RA_MEMVIEW16BIT, BST_UNCHECKED);
             CheckDlgButton(hDlg, IDC_RA_MEMVIEW32BIT, BST_UNCHECKED);
 
-            MemoryProc(hDlg, WM_COMMAND, IDC_RA_CBO_8BIT, 0); //	Imitate a buttonpress of '8-bit'
             g_MemoryDialog.OnLoad_NewRom();
 
             // Add a single column for list view
@@ -1060,6 +1053,7 @@ INT_PTR Dlg_Memory::MemoryProc(HWND hDlg, UINT nMsg, WPARAM wParam, LPARAM lPara
                     EnableWindow(GetDlgItem(hDlg, IDC_RA_RESULTS_BACK), TRUE);
                     EnableWindow(GetDlgItem(hDlg, IDC_RA_RESULTS_FORWARD), FALSE);
 
+                    assert(m_SearchResults.size() >= 2); // expect at least initial search and new filter holder
                     SearchResult& srPrevious = *(m_SearchResults.end() - 2);
                     SearchResult& sr = m_SearchResults.back();
                     sr.m_nCompareType = nCmpType;
@@ -1562,7 +1556,7 @@ void Dlg_Memory::OnLoad_NewRom()
             if (g_MemManager.TotalBankSize() > 0x10000)
                 label = ra::StringPrintf(TEXT("System Memory (0x%06X-0x%06X)"), start, end);
             else
-                label = ra::StringPrintf(TEXT("System Memory (0x%06X-0x%06X)"), start, end);
+                label = ra::StringPrintf(TEXT("System Memory (0x%04X-0x%04X)"), start, end);
 
             SetDlgItemText(g_MemoryDialog.m_hWnd, IDC_RA_CBO_SEARCHGAMERAM, label.c_str());
             EnableWindow(GetDlgItem(g_MemoryDialog.m_hWnd, IDC_RA_CBO_SEARCHGAMERAM), TRUE);
@@ -1578,7 +1572,10 @@ void Dlg_Memory::OnLoad_NewRom()
 
     MemoryViewerControl::destroyEditCaret();
     MemoryViewerControl::Invalidate();
+
     m_SearchResults.clear();
+    ClearLogOutput();
+    EnableWindow(GetDlgItem(g_MemoryDialog.m_hWnd, IDC_RA_DOTEST), FALSE);
 }
 
 void Dlg_Memory::Invalidate()

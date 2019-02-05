@@ -204,10 +204,21 @@ void GameContext::RefreshUnlocks(bool bUnpause)
             ra::services::ServiceLocator::GetMutable<ra::services::AchievementRuntime>().SetPaused(false);
 
 #ifndef RA_UTEST
-        for (int nIndex = 0; nIndex < ra::to_signed(g_pActiveAchievements->NumAchievements()); ++nIndex)
+        if (ActiveAchievementType() == AchievementSet::Type::Core)
         {
-            const Achievement& Ach = g_pActiveAchievements->GetAchievement(nIndex);
-            g_AchievementsDialog.OnEditData(nIndex, Dlg_Achievements::Column::Achieved, Ach.Active() ? "No" : "Yes");
+            for (int nIndex = 0; nIndex < ra::to_signed(g_pActiveAchievements->NumAchievements()); ++nIndex)
+            {
+                const Achievement& Ach = g_pActiveAchievements->GetAchievement(nIndex);
+                g_AchievementsDialog.OnEditData(nIndex, Dlg_Achievements::Column::Achieved, Ach.Active() ? "No" : "Yes");
+            }
+        }
+        else
+        {
+            for (int nIndex = 0; nIndex < ra::to_signed(g_pActiveAchievements->NumAchievements()); ++nIndex)
+            {
+                const Achievement& Ach = g_pActiveAchievements->GetAchievement(nIndex);
+                g_AchievementsDialog.OnEditData(nIndex, Dlg_Achievements::Column::Active, Ach.Active() ? "Yes" : "No");
+            }
         }
 #endif
     });
@@ -502,6 +513,39 @@ Achievement& GameContext::NewAchievement(AchievementSet::Type nType)
 #endif
 
     return pAchievement;
+}
+
+bool GameContext::RemoveAchievement(unsigned int nAchievementId)
+{
+    for (auto pIter = m_vAchievements.begin(); pIter != m_vAchievements.end(); ++pIter)
+    {
+        if (*pIter && (*pIter)->ID() == nAchievementId)
+        {
+#ifndef RA_UTEST
+            // temporary code for compatibility until global collections are eliminated
+            switch (ra::itoe<AchievementSet::Type>((*pIter)->Category()))
+            {
+                case AchievementSet::Type::Core:
+                    g_pCoreAchievements->RemoveAchievement(pIter->get());
+                    break;
+
+                default:
+                case AchievementSet::Type::Unofficial:
+                    g_pUnofficialAchievements->RemoveAchievement(pIter->get());
+                    break;
+
+                case AchievementSet::Type::Local:
+                    g_pLocalAchievements->RemoveAchievement(pIter->get());
+                    break;
+            }
+#endif
+
+            m_vAchievements.erase(pIter);
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void GameContext::AwardAchievement(unsigned int nAchievementId) const
